@@ -20,7 +20,7 @@ def load_file_markers(
     Returns: a list of file markers with image_path,label tuples
     """
     
-    file_dir = os.path.join("./file_markers", source)
+    file_dir = os.path.join("./filemarkers", source)
 
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
@@ -31,7 +31,7 @@ def load_file_markers(
 
         labels = [fm[1] for fm in file_markers]
         sss = StratifiedShuffleSplit(
-            n_splits=1, test_size=val_scale, random_state=cv_seed
+            n_splits=1, test_size=val_scale, random_state=seed
         )
 
         for train_ndx, val_ndx in sss.split(np.zeros(len(labels)), labels):
@@ -52,8 +52,13 @@ def load_file_markers(
     if verbose:
         print(f"{len(file_markers)} files in {split_type} split...")
 
+    
+    if source == "cxr_a":
+        # strip off the first part of img_pth
+        file_markers = [(fm[0].split("/")[-1], fm[1]) for fm in file_markers]
+
     # shuffle file markers
-    np.random.seed(cv_seed)
+    np.random.seed(seed)
     np.random.shuffle(file_markers)
 
     return file_markers
@@ -103,9 +108,4 @@ def get_data_transforms(dataset_name, normalization_type="none"):
     data_transforms["test"] = eval_transform
     return data_transforms
 
-    
 
-# if __name__ == "__main__":
-    
-#     for split_type in ["train", "val", "test"]:
-#         fms = load_file_markers("cxr_a",split_type,None,0.2,0,)

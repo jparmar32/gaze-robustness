@@ -10,6 +10,7 @@ import pydicom
 
 from utils import load_file_markers, get_data_transforms
 
+import pdb
 
 class RoboGazeDataset(Dataset):
 
@@ -65,9 +66,9 @@ class RoboGazeDataset(Dataset):
         img_id, label = self.file_markers[idx]
 
         if self.source == "cxr_a":
-            img_pth = os.path.append(self.data_dir, f"cxr_ibm/dicom_images/{img_id}")
+            img_pth = os.path.join(self.data_dir, f"cxr_ibm/dicom_images/{img_id}")
         elif self.source == "cxr_p":
-            img_pth = os.path.append(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
+            img_pth = os.path.join(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
         else:
             raise ValueError(f"{self.source} not an implemented dataset.")
 
@@ -76,6 +77,8 @@ class RoboGazeDataset(Dataset):
         img = Image.fromarray(np.uint8(img))
 
         img = self.transform(img)
+        if img.shape[0] == 1:
+            img = torch.cat([img, img, img])
 
         return img, label 
 
@@ -108,7 +111,6 @@ def fetch_dataloaders(
         dataloaders.append(
             DataLoader(
                 dataset=dataset,
-                split=split,
                 shuffle=split == "train",
                 batch_size=batch_size,
                 num_workers=num_workers,
@@ -116,6 +118,14 @@ def fetch_dataloaders(
         )
 
     return dataloaders
+
+
+if __name__ == "__main__":
+    
+    dls = fetch_dataloaders("cxr_a","/media",0.2,0,32,4)
+
+    # for (img,label) in dls[0]:
+    #     pdb.set_trace()
 
 
 
