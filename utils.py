@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 
 from torchvision import transforms
+from functools import partial
 
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -109,3 +110,73 @@ def get_data_transforms(dataset_name, normalization_type="none"):
     return data_transforms
 
 
+class AverageMeter(object):
+    """Computes and stores the average and current value
+    Imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val, self.avg, self.sum, self.count = [0] * 4
+
+    def update(self, val, n=1):
+        if isinstance(val, torch.Tensor):
+            val = val.data.cpu().item()
+        if isinstance(n, torch.Tensor):
+            n = n.data.cpu().item()
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / max(self.count, 1)
+
+def accuracy(targets, probs, return_stats=False, as_percent=True):
+    """Return the number of probs that match the associated ground truth label,
+    along with the total number of probs/labels."""
+    probs, targets = torch.as_tensor(probs), torch.as_tensor(targets)
+    if len(probs.shape) == 1 or probs.shape[-1] == 1:
+        predicted = (probs.data > 0.5).float()
+    else:
+        predicted = torch.argmax(probs.data, 1)
+    total = targets.shape[0]
+    correct = (predicted == targets).sum().item()
+    acc = correct / total
+    if as_percent:
+        acc *= 100
+    if return_stats:
+        return acc, (correct, total)
+    return acc
+
+def compute_roc_auc(targets, probs):
+    try:
+        num_classes = len(set(np.array(targets)))
+        if (
+            num_classes < 2
+            or len(probs.shape) < 1
+            or len(probs.shape) > 2
+            or (len(probs.shape) == 2 and probs.shape[1] != num_classes)
+        ):
+            raise ValueError
+        elif num_classes == 2:
+            if len(probs.shape) == 2:
+                probs = probs[:, 1]
+        else:
+            if len(probs.shape) < 2:
+                raise ValueError
+        auroc = skl.roc_auc_score(targets, probs, multi_class="ovo")
+    except ValueError:
+        auroc = -1
+    return auroc
+
+
+def get_lrs(optimizer):
+    lrs = []
+    for param_group in optimizer.param_groups:
+        if "lr" in param_group:
+            lrs.append(param_group["lr"])
+    return lrs
+
+
+def build_scheduler(args):
+    scheduler_type = partial(CosineScheduler, T_max=args.epochs, eta_min=args.min_lr)

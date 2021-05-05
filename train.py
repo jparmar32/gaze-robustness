@@ -19,9 +19,12 @@ import torchvision
 from torchvision import datasets, models, transforms
 import copy
 
+from utils import AverageMeter, accuracy, compute_roc_auc
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--min-lr", type=float, default=0, help="Minimum learning rate")
 
 
 def evaluate(
@@ -72,66 +75,6 @@ def evaluate(
     saved = probs_cat if save_type == "probs" else logits_cat
     return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-class AverageMeter(object):
-    """Computes and stores the average and current value
-    Imported from https://github.com/pytorch/examples/blob/master/imagenet/main.py#L247-L262
-    """
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val, self.avg, self.sum, self.count = [0] * 4
-
-    def update(self, val, n=1):
-        if isinstance(val, torch.Tensor):
-            val = val.data.cpu().item()
-        if isinstance(n, torch.Tensor):
-            n = n.data.cpu().item()
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / max(self.count, 1)
-
-def accuracy(targets, probs, return_stats=False, as_percent=True):
-    """Return the number of probs that match the associated ground truth label,
-    along with the total number of probs/labels."""
-    probs, targets = torch.as_tensor(probs), torch.as_tensor(targets)
-    if len(probs.shape) == 1 or probs.shape[-1] == 1:
-        predicted = (probs.data > 0.5).float()
-    else:
-        predicted = torch.argmax(probs.data, 1)
-    total = targets.shape[0]
-    correct = (predicted == targets).sum().item()
-    acc = correct / total
-    if as_percent:
-        acc *= 100
-    if return_stats:
-        return acc, (correct, total)
-    return acc
-
-def compute_roc_auc(targets, probs):
-    try:
-        num_classes = len(set(np.array(targets)))
-        if (
-            num_classes < 2
-            or len(probs.shape) < 1
-            or len(probs.shape) > 2
-            or (len(probs.shape) == 2 and probs.shape[1] != num_classes)
-        ):
-            raise ValueError
-        elif num_classes == 2:
-            if len(probs.shape) == 2:
-                probs = probs[:, 1]
-        else:
-            if len(probs.shape) < 2:
-                raise ValueError
-        auroc = skl.roc_auc_score(targets, probs, multi_class="ovo")
-    except ValueError:
-        auroc = -1
-    return auroc
-
-
 def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True):
 
 
@@ -178,16 +121,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
 
     return loss_meter.avg, acc_meter.avg, auroc
 
-
-def get_lrs(optimizer):
-    lrs = []
-    for param_group in optimizer.param_groups:
-        if "lr" in param_group:
-            lrs.append(param_group["lr"])
-    return lrs
-
-
-def train(model, optimizer, scheduler, loaders, state, args, use_cuda=True):
+def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
     loss_fn = nn.CrossEntropyLoss()
 
     ### implement metric choice
@@ -204,6 +138,13 @@ def train(model, optimizer, scheduler, loaders, state, args, use_cuda=True):
     }
 
     for epoch in range(args.epochs):
+
+        scheduler.last_epoch = epoch - 1
+        scheduler_args = []
+        with warnings.catch_warnings():
+            if epoch == 0:
+                warnings.simplefilter("ignore")
+            scheduler.step(*scheduler_args)
 
         cur_lrs = get_lrs(optimizer)
 
@@ -271,9 +212,10 @@ def main():
     params_to_update = model.parameters()
     optimizer = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
 
-    ##TODO: default scheduler
 
-    best_model, val_auroc, metrics = train(model, optimizer, loaders, args, use_cuda=True)
+    scheduler = build_scheduler(args)
+
+    best_model, val_auroc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
     print(f"Best Val Auroc {val_auroc}")
     test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
     print(f"Besst Test Auroc {test_auroc}")
