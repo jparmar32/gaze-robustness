@@ -4,7 +4,6 @@ import json
 import os
 import pickle
 import sys
-from progress.bar import IncrementalBar as ProgressBar
 import warnings
 import sklearn.metrics as skl
 
@@ -18,14 +17,17 @@ import torch.optim as optim
 import torchvision
 from torchvision import datasets, models, transforms
 import copy
+from dataloader import fetch_dataloaders
 
-from utils import AverageMeter, accuracy, compute_roc_auc
+from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--min-lr", type=float, default=0, help="Minimum learning rate")
 
+    args = parser.parse_args()
+    return args
 
 def evaluate(
     model,
@@ -36,7 +38,7 @@ def evaluate(
 
 ):
 
-    loss_meter, acc_meter = [AverageMeter() for i in range(3)]
+    loss_meter, acc_meter = [AverageMeter() for i in range(2)]
     auroc = -1
     all_targets, all_probs, all_logits = [], [], []
     all_ids = []
@@ -44,13 +46,20 @@ def evaluate(
     for batch_idx, batch in enumerate(loader):
         with torch.no_grad():
             inputs, targets = batch
-            targets = targets["target"]
-            images = inputs["image"]
+            #print(inputs.size())
+            #print(targets.size())
+            #targets_data = targets["target"]
+            #images = inputs["image"]
             if use_cuda:
-                targets_data = targets_data.cuda(non_blocking=True)
-                images = images.cuda(non_blocking=True)
-            inputs_dict = {"images": images}
-            output = model.image_model(inputs_dict["images"])
+                targets = targets.cuda(non_blocking=True)
+                inputs = inputs.cuda(non_blocking=True)
+            #targets_dict = {"target": targets_data}
+            #inputs_dict = {"images": images}
+
+            #targets = targets_dict["tacfrget"]
+
+            #output = model.image_model(inputs_dict["images"])
+            output = model(inputs)
 
             if isinstance(output, tuple):
                 logits, attn = output
@@ -66,7 +75,7 @@ def evaluate(
         all_targets.append(targets.cpu())
         all_logits.append(logits.data.cpu())
         all_probs.append(probs.cpu())
-        all_ids.extend(batch[0]["id"])
+        #all_ids.extend(batch[0]["id"])
         targets_cat = torch.cat(all_targets).numpy()
         probs_cat = torch.cat(all_probs).numpy()
         auroc = compute_roc_auc(targets_cat, probs_cat)
@@ -85,17 +94,20 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
     for batch_idx, batch in enumerate(loader):
 
         inputs, targets = batch
-        targets_data = targets["target"]
-        images = inputs["image"]
+        #print(inputs.size())
+        #print(targets.size())
+        #targets_data = targets["target"]
+        #images = inputs["image"]
         if use_cuda:
-            targets_data = targets_data.cuda(non_blocking=True)
-            images = images.cuda(non_blocking=True)
-        targets_dict = {"target": targets_data}
-        inputs_dict = {"images": images}
+            targets = targets.cuda(non_blocking=True)
+            inputs = inputs.cuda(non_blocking=True)
+        #targets_dict = {"target": targets_data}
+        #inputs_dict = {"images": images}
 
-        targets = targets_dict["target"]
+        #targets = targets_dict["tacfrget"]
 
-        output = model.image_model(inputs_dict["images"])
+        #output = model.image_model(inputs_dict["images"])
+        output = model(inputs)
 
         if isinstance(output, tuple):
             logits, attn = output
@@ -191,20 +203,21 @@ def main():
     use_cuda = torch.cuda.is_available()
     if use_cuda:
         print("Using CUDA...")
-        torch.backends.cudnn.deterministic = args.deterministic
-        torch.backends.cudnn.benchmark = not args.deterministic
+        #torch.backends.cudnn.deterministic = args.deterministic
+        #torch.backends.cudnn.benchmark = not args.deterministic
 
 
     #load in data loader
 
-    loaders = fetch_dataloaders()
+    loaders = fetch_dataloaders("cxr_a","/media",0.2,0,32,4)
 
-    num_classes = loaders["train"].dataset.num_classes
+    num_classes = 2 #loaders["train"].dataset.num_classes
 
 
     model = models.resnet50(pretrained=True)
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
+    model.cuda()
 
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -212,8 +225,8 @@ def main():
     params_to_update = model.parameters()
     optimizer = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
 
-
-    scheduler = build_scheduler(args)
+    
+    scheduler = build_scheduler(args, optimizer)
 
     best_model, val_auroc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
     print(f"Best Val Auroc {val_auroc}")

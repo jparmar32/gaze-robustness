@@ -6,8 +6,10 @@ from torchvision import transforms
 from functools import partial
 
 from sklearn.model_selection import StratifiedShuffleSplit
-
+from torch.optim.lr_scheduler import CosineAnnealingLR as CosineScheduler
+import torch 
 import pdb
+import sklearn.metrics as skl
 
 def load_file_markers(
     source,
@@ -178,5 +180,7 @@ def get_lrs(optimizer):
     return lrs
 
 
-def build_scheduler(args):
+def build_scheduler(args, optimizer):
     scheduler_type = partial(CosineScheduler, T_max=args.epochs, eta_min=args.min_lr)
+    scheduler = scheduler_type(optimizer)
+    return scheduler

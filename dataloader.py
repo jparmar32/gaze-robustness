@@ -95,7 +95,7 @@ def fetch_dataloaders(
 
     
     transforms = get_data_transforms("cxr", normalization_type="train_images")
-    dataloaders = []
+    dataloaders = {}
 
     for split in ["train", "val", "test"]:
 
@@ -108,7 +108,7 @@ def fetch_dataloaders(
             seed=seed,
         )
 
-        dataloaders.append(
+        dataloaders[split] = (
             DataLoader(
                 dataset=dataset,
                 shuffle=split == "train",
@@ -123,7 +123,6 @@ def fetch_dataloaders(
 if __name__ == "__main__":
     
     dls = fetch_dataloaders("cxr_a","/media",0.2,0,32,4)
-
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 
