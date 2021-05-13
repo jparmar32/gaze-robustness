@@ -10,7 +10,6 @@ import pydicom
 
 from utils import load_file_markers, get_data_transforms
 
-import pdb
 
 class RoboGazeDataset(Dataset):
 
@@ -25,7 +24,6 @@ class RoboGazeDataset(Dataset):
         data_dir,
         split_type,
         transform,
-        ood_type=None,
         val_scale=0.2,
         seed=0
     ):
@@ -38,13 +36,18 @@ class RoboGazeDataset(Dataset):
         """
 
         self.source = source
+
+        self.ood = False
+        if self.source not in ['cxr_a', 'cxr_p']:
+            self.ood = True
+
         self.data_dir = data_dir
         self.split_type = split_type
         self.transform = transform
         self.file_markers = load_file_markers(
             source,
             split_type,
-            ood_type,
+            self.ood,
             val_scale,
             seed,
         )
@@ -70,11 +73,14 @@ class RoboGazeDataset(Dataset):
         elif self.source == "cxr_p":
             img_pth = os.path.join(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
         else:
-            raise ValueError(f"{self.source} not an implemented dataset.")
+            img_pth = img_id
 
-        ds = pydicom.dcmread(img_pth)
-        img = ds.pixel_array
-        img = Image.fromarray(np.uint8(img))
+        if self.ood:
+            img = Image.open(img_pth)
+        else:
+            ds = pydicom.dcmread(img_pth)
+            img = ds.pixel_array
+            img = Image.fromarray(np.uint8(img))
 
         img = self.transform(img)
         if img.shape[0] == 1:
@@ -90,7 +96,9 @@ def fetch_dataloaders(
     val_scale,
     seed,
     batch_size,
-    num_workers
+    num_workers,
+    ood_set = None,
+    ood_shift = None
 ):
 
     
@@ -98,6 +106,10 @@ def fetch_dataloaders(
     dataloaders = {}
 
     for split in ["train", "val", "test"]:
+
+        if ood_set is not None:
+            if split == "test":
+                source = f"{ood_set}/{source}/{ood_shift}"
 
         dataset = RoboGazeDataset(
             source=source,
@@ -122,7 +134,7 @@ def fetch_dataloaders(
 
 if __name__ == "__main__":
     
-    dls = fetch_dataloaders("cxr_a","/media",0.2,0,32,4)
+    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 

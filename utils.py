@@ -48,6 +48,7 @@ def load_file_markers(
             file_markers = file_markers_val
 
     elif split_type == "test":
+        
         file_markers_dir = os.path.join(file_dir, "test_list.pkl")
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
