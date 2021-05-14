@@ -111,6 +111,7 @@ def fetch_dataloaders(
             if split == "test":
                 source = f"{ood_set}/{source}/{ood_shift}"
 
+        print(source)
         dataset = RoboGazeDataset(
             source=source,
             data_dir=data_dir,
@@ -134,7 +135,7 @@ def fetch_dataloaders(
 
 if __name__ == "__main__":
     
-    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
+    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 

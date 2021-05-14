@@ -49,42 +49,6 @@ def create_chexpert_filemarker(dset,shift):
     with open(test_dir,"wb") as pkl_f:
         pickle.dump(all_file_markers,pkl_f)
 
-    
-## cxr-p
-def create_mimic_cxr_filemarker():
-    base_dir = "/media/physionet.org/files/mimic-cxr-jpg/2.0.0/files/"
-    test_file = "/home/jsparmar/test_data/CXR-P Splits/hospital_shift_mimicxr_test_cxrp.csv"
-    all_file_markers = []
-    labs = []
-
-    
-    with open(test_file,"r") as cf:
-        rows = csv.reader(cf)
-
-        for i, row in enumerate(rows):
-            if i == 0:
-                print(row)
-            if i > 0:
-                
-                if int(row[1]) < 11000000:
-                    pre_index = "p10"
-                else: 
-                    pre_index = "p11"
-
-                image_path = f"{pre_index}/p{row[1]}/s{row[2]}/{row[0]}"
-                pth = os.path.join(base_dir,image_path+".jpg")
-
-                if row[3] == "Pneumothorax":
-                    lab = 1
-                else:
-                    lab = 0
-
-                labs.append(lab)
-                all_file_markers.append((pth, lab))
-    
-    test_dir = os.path.join(save_dir,"test_list.pkl")
-    with open(test_dir,"wb") as pkl_f:
-        pickle.dump(all_file_markers,pkl_f)
 
 def chestxray8_helper(val, second_val):
 
@@ -197,16 +161,23 @@ def chestxray8_helper(val, second_val):
     return None
 
 ## cxr-a
-def create_chestxray8_filemarker(shift = 'hospital'):
+def create_chestxray8_filemarker(dset= "a", shift = 'hospital'):
     
 
     base_dir = "/media/chestxray8/"
-    if shift == 'hospital':
-        test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_shift_mean_52.313_chestxray8_test_cxra.csv"
-        save_dir = "./chestxray8/cxr_a/hospital"
+
+    if dset == "a":
+        if shift == 'hospital':
+            test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_shift_mean_52.313_chestxray8_test_cxra.csv"
+            save_dir = "./chestxray8/cxr_a/hospital"
+        else:
+            test_file = '/home/jsparmar/test_data/CXR-A Splits/hospital_age_mean_62.45_shift_chestxray8_test_cxra.csv'
+            save_dir = "./chestxray8/cxr_a/hospital_age"
     else:
-        test_file = '/home/jsparmar/test_data/CXR-A Splits/hospital_age_mean_62.45_shift_chestxray8_test_cxra.csv'
-        save_dir = "./chestxray8/cxr_a/hospital_age"
+        test_file = '/home/jsparmar/test_data/CXR-P Splits/hospital_age_mean_71.391_shift_chestxray8_test_cxrp.csv'
+        save_dir = "./chestxray8/cxr_p/age"
+        
+
 
 
     all_file_markers = []
@@ -230,7 +201,7 @@ def create_chestxray8_filemarker(shift = 'hospital'):
                 image_path = f"{file}/{row[0]}"
                 pth = os.path.join(base_dir,image_path)
 
-                if row[1] == "Pneumonia":
+                if row[1] != "No Finding":
                     lab = 1
                 else:
                     lab = 0
@@ -242,6 +213,9 @@ def create_chestxray8_filemarker(shift = 'hospital'):
     test_dir = os.path.join(save_dir,"test_list.pkl")
     with open(test_dir,"wb") as pkl_f:
         pickle.dump(all_file_markers,pkl_f)
+
+
+
 
     
 ## cxr-p
@@ -290,8 +264,9 @@ def main():
     create_chexpert_filemarker(dset="p", shift='hospital')
     create_chexpert_filemarker(dset="p", shift='hospital_age')
 
-    create_chestxray8_filemarker(shift='hospital')
-    create_chestxray8_filemarker(shift='hospital_age')
+    create_chestxray8_filemarker(dset="a", shift='hospital')
+    create_chestxray8_filemarker(dset="a", shift='hospital_age')
+    create_chestxray8_filemarker(dset="p", shift='age')
     
     create_mimic_cxr_filemarker()
     
