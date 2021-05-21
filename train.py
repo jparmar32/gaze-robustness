@@ -6,6 +6,7 @@ import pickle
 import sys
 import warnings
 import sklearn.metrics as skl
+import json
 
 
 import matplotlib.pyplot as plt
@@ -23,8 +24,18 @@ from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--min-lr", type=float, default=0, help="Minimum learning rate")
+    parser.add_argument("--epochs", type=int, default=25, help="Number of training epochs")
+    parser.add_argument("--min_lr", type=float, default=0, help="Minimum learning rate")
+    parser.add_argument("--save_model", action='store_true', help="Whether to save the best model found or not") ##will be false unles flag is specified
+    parser.add_argument("--checkpoint_dir", type=str, default=None, help="Whether to use a given saved model")
+    parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+
+    parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p'], required=True, help="Set to train on")
+    parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8'], required=True, help="Test set to evaluate on")
+    parser.add_argument("--ood_shift", type=str, choices=['age','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
+
+    parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")
 
     args = parser.parse_args()
     return args
@@ -139,7 +150,7 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
     ### implement metric choice
 
     best_model_wts = copy.deepcopy(model.state_dict())
-    best_auroc = 0.0
+    best_acc = 0.0
     metrics = {
         "train_loss": [],
         "val_loss": [],
@@ -188,13 +199,13 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
         metrics['val_auroc'].append(val_auroc)
 
 
-        if val_auroc >= best_auroc:
-            best_auroc = val_auroc
+        if val_acc >= best_acc:
+            best_acc = val_acc
             best_model_wts = copy.deepcopy(model.state_dict())
 
     model.load_state_dict(best_model_wts)
-    print(f"\nBest Auroc: {best_auroc:.3f}")
-    return model, best_auroc, metrics
+    print(f"\nBest Val Acc: {best_acc:.3f}")
+    return model, best_acc, metrics
 
 
 
@@ -209,32 +220,84 @@ def main():
 
     #load in data loader
 
-    loaders = fetch_dataloaders("cxr_p","/media",0.2,0,32,4)
+    if args.ood_shift is not None:
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, ood_set= args.test_set, ood_shift = args.ood_shift)
+    else:
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
 
     num_classes = 2 #loaders["train"].dataset.num_classes
 
-
-    model = models.resnet50(pretrained=True)
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, num_classes)
-    model.cuda()
+    if args.checkpoint_dir is None:
 
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    params_to_update = model.parameters()
+        model = models.resnet50(pretrained=True)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, num_classes)
+        model.cuda()
 
-    ##weight decay is L2
-    optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-    # optimizer = optim.Adam(params_to_update, lr=0.0001, weight_decay=0.0001)
-    
-    scheduler = build_scheduler(args, optimizer)
 
-    best_model, val_auroc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
-    print(f"Best Val Auroc {val_auroc}")
-    test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
-    print(f"Besst Test Auroc {test_auroc}")
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model = model.to(device)
+        params_to_update = model.parameters()
+
+        ##weight decay is L2
+        #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
+        optimizer = optim.Adam(params_to_update, lr=0.0001, weight_decay=0.0001)
+        
+        scheduler = build_scheduler(args, optimizer)
+
+        best_model, val_acc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
+
+
+        #save model 
+
+        if args.save_model:
+
+            save_path = f"{args.save_dir}/train_set_{args.train_set}/seed_{args.seed}"
+
+            os.makedirs(save_path, exist_ok=True)
+
+            torch.save(model.state_dict(), save_path + "/model.pt")
+            print(f"Saved Best Model to {save_path}")
+        
+        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
+        print(f"Best Test Auroc {test_auroc}")
+
+        save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
+
+        #save results 
+
+        save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
+        os.makedirs(save_res, exist_ok=True)
+        save_res = save_res + "/result.json"
+
+        with open(save_res, 'w') as fp:
+            json.dump(save_dict, fp)
+
+
+    else:
+        num_classes = 2
+        print("Using checkpointed model...")
+        model = models.resnet50(pretrained=True)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, num_classes)
+        model.load_state_dict(torch.load(args.checkpoint_dir))
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model = model.to(device)
+        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
+        print(f"Best Test Auroc {test_auroc}")
+        save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
+        
+        #save results 
+
+        
+        save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
+        os.makedirs(save_res, exist_ok=True)
+        save_res = save_res + "/result.json"
+
+        with open(save_res, 'w') as fp:
+            json.dump(save_dict, fp)
 
 if __name__ == "__main__":
     main()
