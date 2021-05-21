@@ -111,7 +111,7 @@ def fetch_dataloaders(
             if split == "test":
                 source = f"{ood_set}/{source}/{ood_shift}"
 
-        print(source)
+        #print(source)
         dataset = RoboGazeDataset(
             source=source,
             data_dir=data_dir,

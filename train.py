@@ -209,7 +209,8 @@ def main():
 
     #load in data loader
 
-    loaders = fetch_dataloaders("cxr_a","/media",0.2,0,32,4)
+    loaders = fetch_dataloaders("cxr_p","/media",0.2,0,32,4)
+    #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
 
     num_classes = 2 #loaders["train"].dataset.num_classes
 
@@ -223,8 +224,10 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     params_to_update = model.parameters()
-    optimizer = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
 
+    ##weight decay is L2
+    optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
+    # optimizer = optim.Adam(params_to_update, lr=0.0001, weight_decay=0.0001)
     
     scheduler = build_scheduler(args, optimizer)
 
