@@ -1,6 +1,6 @@
 #!/bin/sh
-train="cxr_a"
-test="chexpert"
+train="cxr_p"
+test="cxr_p"
 
 for seed in 0 1 2 3 4 5 6 7 8 9 
 do
@@ -16,7 +16,8 @@ do
         --test_set $test \
         --save_dir "/mnt/gaze_robustness_results/resnet_only" \
         --checkpoint_dir "/mnt/gaze_robustness_results/resnet_only/train_set_$train/seed_$seed/model.pt" \
-        --ood_shift "hospital_age" \
+        --subclass_eval \
+        #--ood_shift "hospital_age" \
    
 
 done

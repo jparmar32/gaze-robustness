@@ -25,7 +25,8 @@ class RoboGazeDataset(Dataset):
         split_type,
         transform,
         val_scale=0.2,
-        seed=0
+        seed=0,
+        subclass=False
     ):
 
         """
@@ -44,12 +45,14 @@ class RoboGazeDataset(Dataset):
         self.data_dir = data_dir
         self.split_type = split_type
         self.transform = transform
+        self.subclass = subclass
         self.file_markers = load_file_markers(
             source,
             split_type,
             self.ood,
             val_scale,
             seed,
+            subclass=self.subclass
         )
 
     def __len__(self):
@@ -67,11 +70,24 @@ class RoboGazeDataset(Dataset):
         """
 
         img_id, label = self.file_markers[idx]
+        
+        subclass_label = 0
 
         if self.source == "cxr_a":
             img_pth = os.path.join(self.data_dir, f"cxr_ibm/dicom_images/{img_id}")
         elif self.source == "cxr_p":
             img_pth = os.path.join(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
+
+            with open('/media/pneumothorax/cxr_tube_dict.pkl', 'rb') as f:          
+                cxr_tube_dict = pickle.load(f)
+
+            image_name = img_id.split("/")[-1].split(".dcm")[0]
+
+            if self.subclass:
+                subclass_label = 1 if cxr_tube_dict[image_name] is True else 0
+            else:
+                subclass_label = np.random.randint(0, 2)
+
         else:
             img_pth = img_id
 
@@ -91,7 +107,7 @@ class RoboGazeDataset(Dataset):
         if img.shape[0] == 4:
             img = img[:3] 
 
-        return img, label 
+        return img, label, subclass_label 
 
 
 
@@ -103,7 +119,8 @@ def fetch_dataloaders(
     batch_size,
     num_workers,
     ood_set = None,
-    ood_shift = None
+    ood_shift = None,
+    subclass = False
 ):
 
     
@@ -116,7 +133,7 @@ def fetch_dataloaders(
             if split == "test":
                 source = f"{ood_set}/{source}/{ood_shift}"
 
-        #print(source)
+        print(subclass)
         dataset = RoboGazeDataset(
             source=source,
             data_dir=data_dir,
@@ -124,6 +141,7 @@ def fetch_dataloaders(
             transform=transforms[split],
             val_scale=val_scale,
             seed=seed,
+            subclass=subclass
         )
 
         dataloaders[split] = (
@@ -140,12 +158,15 @@ def fetch_dataloaders(
 
 if __name__ == "__main__":
     
-    dls = fetch_dataloaders("cxr_a","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
+    #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
+    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, subclass=True)
 
-    #dataiter = iter(dls['test'])
+    dataiter = iter(dls['train'])
 
-    #for i in range(4607):
-        #images, labels = dataiter.next()
+    for i in range(1):
+        images, labels, subclass_label = dataiter.next()
+
+        print(subclass_label)
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 

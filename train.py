@@ -38,6 +38,8 @@ def parse_args():
     parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")
+    parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
+    parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
     args = parser.parse_args()
     return args
@@ -45,57 +47,158 @@ def parse_args():
 def evaluate(
     model,
     loader,
+    args,
     loss_fn=nn.CrossEntropyLoss(),
     use_cuda=True,
     save_type="probs",
 
 ):
 
-    loss_meter, acc_meter = [AverageMeter() for i in range(2)]
-    auroc = -1
-    all_targets, all_probs, all_logits = [], [], []
-    all_ids = []
-    model.eval()
-    for batch_idx, batch in enumerate(loader):
-        with torch.no_grad():
-            inputs, targets = batch
-            #print(inputs.size())
-            #print(targets.size())
-            #targets_data = targets["target"]
-            #images = inputs["image"]
-            if use_cuda:
-                targets = targets.cuda(non_blocking=True)
-                inputs = inputs.cuda(non_blocking=True)
-            #targets_dict = {"target": targets_data}
-            #inputs_dict = {"images": images}
 
-            #targets = targets_dict["tacfrget"]
+    if args.subclass_eval:
 
-            #output = model.image_model(inputs_dict["images"])
-            output = model(inputs)
+        loss_meter_dict = {} ## class label is first
+        acc_meter_dict = {}
+        auroc_dict = {}
+        all_targets_dict = {}
+        all_probs_dict = {}
+        all_logits_dict = {}
 
-            if isinstance(output, tuple):
-                logits, attn = output
-            else:
-                logits, attn = output, None
-            c_loss = loss_fn(logits, targets)
-            loss = c_loss
-            acc, (_, total) = accuracy(targets, logits, return_stats=True)
+        for i in range(args.num_classes):
+            for j in range(2):
 
-        acc_meter.update(acc, total)
-        loss_meter.update(loss, total)
-        probs = F.softmax(logits.data, dim=1)
-        all_targets.append(targets.cpu())
-        all_logits.append(logits.data.cpu())
-        all_probs.append(probs.cpu())
-        #all_ids.extend(batch[0]["id"])
-        targets_cat = torch.cat(all_targets).numpy()
-        probs_cat = torch.cat(all_probs).numpy()
-        auroc = compute_roc_auc(targets_cat, probs_cat)
+                loss_meter_dict[(i,j)] = AverageMeter()
+                acc_meter_dict[(i,j)] = AverageMeter()
+                auroc_dict[(i,j)] = 0
+                all_targets_dict[(i,j)] = []
+                all_probs_dict[(i,j)] = []
+                all_logits_dict[(i,j)] = []
 
-    logits_cat = torch.cat(all_logits).numpy()
-    saved = probs_cat if save_type == "probs" else logits_cat
-    return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
+        all_ids = []
+        model.eval()
+        for batch_idx, batch in enumerate(loader):
+            with torch.no_grad():
+                inputs, targets, subclass_labels = batch
+    
+                if use_cuda:
+                    targets = targets.cuda(non_blocking=True)
+                    inputs = inputs.cuda(non_blocking=True)
+
+                output = model(inputs)
+                sub_groups = {}
+                for i in range(args.num_classes):
+                    for j in range(2):
+                        sub_groups[(i,j)] = [[], []]
+
+                output_np = output.cpu().numpy()
+                targets_np = targets.cpu().numpy()
+                subclass_labels_np = subclass_labels.cpu().numpy()
+                for out, target, subclass in zip(output_np, targets_np, subclass_labels_np):
+                    ret_list = sub_groups[(target, subclass)]
+                    ret_list[0].append(out)
+                    ret_list[1].append(target)
+                    sub_groups[(target, subclass)] = ret_list
+
+                sub_acc_group = {}
+                sub_total_group = {}
+                sub_loss_group = {}
+                sub_logits_group = {}
+                sub_target_group = {}
+
+                for key, val in sub_groups.items():
+                    if len(val[0]) != 0:
+
+                        output_torch = torch.Tensor(val[0])
+                        target_torch = torch.LongTensor(val[1])
+
+                        dev = "cpu" 
+                        if use_cuda:  
+                            dev = "cuda:0" 
+                        device = torch.device(dev)  
+                        output_torch = output_torch.to(device)
+                        target_torch = target_torch.to(device)
+        
+                        
+                        if isinstance(output_torch, tuple):
+                            logits, attn = output_torch
+                        else:
+                            logits, attn = output_torch, None
+
+                        c_loss = loss_fn(logits, target_torch)
+                        loss = c_loss
+                        acc, (_, total) = accuracy(target_torch, logits, return_stats=True)
+
+                        sub_acc_group[key] = acc
+                        sub_total_group[key] = total
+                        sub_loss_group[key] = loss
+                        sub_logits_group[key] = logits
+                        sub_target_group[key] = target_torch
+
+
+            for key, val in sub_acc_group.items():
+
+                acc_meter_dict[key].update(sub_acc_group[key], sub_total_group[key])
+                loss_meter_dict[key].update(sub_loss_group[key], sub_total_group[key])
+                probs = F.softmax(sub_logits_group[key].data, dim=1)
+                all_targets_dict[key].append(sub_target_group[key].cpu())
+                all_logits_dict[key].append(sub_logits_group[key].data.cpu())
+                all_probs_dict[key].append(probs.cpu())
+                targets_cat = torch.cat(all_targets_dict[key]).numpy()
+                probs_cat = torch.cat(all_probs_dict[key]).numpy()
+                auroc_dict[key] = compute_roc_auc(targets_cat, probs_cat)
+
+        saved_dict = {}
+        for i in range(args.num_classes):
+            for j in range(2):
+                logits_cat = torch.cat(all_logits_dict[(i,j)]).numpy() #cangee if needed
+                all_logits_dict[(i,j)] = logits_cat
+                probs_cat = torch.cat(all_probs_dict[(i,j)]).numpy() #change if needed
+                saved_dict[(i,j)] = probs_cat if save_type == "probs" else logits_cat
+                loss_meter_dict[(i,j)] = loss_meter_dict[(i,j)].avg
+                acc_meter_dict[(i,j)] = acc_meter_dict[(i,j)].avg
+
+        return loss_meter_dict, acc_meter_dict, auroc_dict, all_ids, saved_dict
+        
+    else: 
+
+        loss_meter, acc_meter = [AverageMeter() for i in range(2)]
+        auroc = -1
+        all_targets, all_probs, all_logits = [], [], []
+
+        all_ids = []
+        model.eval()
+        for batch_idx, batch in enumerate(loader):
+            with torch.no_grad():
+                inputs, targets, subclass_labels = batch
+    
+                if use_cuda:
+                    targets = targets.cuda(non_blocking=True)
+                    inputs = inputs.cuda(non_blocking=True)
+
+                output = model(inputs)
+
+
+                if isinstance(output, tuple):
+                    logits, attn = output
+                else:
+                    logits, attn = output, None
+                c_loss = loss_fn(logits, targets)
+                loss = c_loss
+                acc, (_, total) = accuracy(targets, logits, return_stats=True)
+
+            acc_meter.update(acc, total)
+            loss_meter.update(loss, total)
+            probs = F.softmax(logits.data, dim=1)
+            all_targets.append(targets.cpu())
+            all_logits.append(logits.data.cpu())
+            all_probs.append(probs.cpu())
+            targets_cat = torch.cat(all_targets).numpy()
+            probs_cat = torch.cat(all_probs).numpy()
+            auroc = compute_roc_auc(targets_cat, probs_cat)
+
+        logits_cat = torch.cat(all_logits).numpy()
+        saved = probs_cat if save_type == "probs" else logits_cat
+        return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
 def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True):
 
@@ -106,20 +209,12 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
     model.train()
     for batch_idx, batch in enumerate(loader):
 
-        inputs, targets = batch
-        #print(inputs.size())
-        #print(targets.size())
-        #targets_data = targets["target"]
-        #images = inputs["image"]
+        inputs, targets, subclass_labels = batch
+
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
-        #targets_dict = {"target": targets_data}
-        #inputs_dict = {"images": images}
-
-        #targets = targets_dict["tacfrget"]
-
-        #output = model.image_model(inputs_dict["images"])
+      
         output = model(inputs)
 
         if isinstance(output, tuple):
@@ -189,6 +284,7 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
         val_loss, val_acc, val_auroc, _, _= evaluate(
             model,
             loaders["val"],
+            args,
             loss_fn=loss_fn,
             use_cuda=use_cuda,
         )
@@ -225,10 +321,10 @@ def main():
     if args.ood_shift is not None:
         loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, ood_set= args.test_set, ood_shift = args.ood_shift)
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, subclass=args.subclass_eval)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
 
-    num_classes = 2 #loaders["train"].dataset.num_classes
+    num_classes = args.num_classes #loaders["train"].dataset.num_classes
 
     if args.checkpoint_dir is None:
 
@@ -264,14 +360,24 @@ def main():
             torch.save(model.state_dict(), save_path + "/model.pt")
             print(f"Saved Best Model to {save_path}")
         
-        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
-        print(f"Best Test Auroc {test_auroc}")
+        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+        if args.subclass_eval:
+            print(f"Best Test Acc {test_acc}")
+        else:
+            print(f"Best Test Auroc {test_auroc}")
 
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
 
         #save results 
 
-        save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
+        if args.subclass_eval:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
+            max_loss = max(save_dict['test_loss'].values())
+            min_acc = min(save_dict['test_acc'].values())
+            min_auc = min(save_dict['test_auroc'].values())
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+        else:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
@@ -280,7 +386,7 @@ def main():
 
 
     else:
-        num_classes = 2
+        num_classes = args.num_classes
         print("Using checkpointed model...")
         model = models.resnet50(pretrained=True)
         num_ftrs = model.fc.in_features
@@ -289,14 +395,25 @@ def main():
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
         print(f"evaluating on {args.test_set}:")
-        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
-        print(f"Best Test Auroc {test_auroc}")
+        test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+
+        if args.subclass_eval:
+            print(f"Best Test Acc {test_acc}")
+        else:
+            print(f"Best Test Auroc {test_auroc}")
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
         
         #save results 
 
+        if args.subclass_eval:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
+            max_loss = max(save_dict['test_loss'].values())
+            min_acc = min(save_dict['test_acc'].values())
+            min_auc = min(save_dict['test_auroc'].values())
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+        else:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         
-        save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 

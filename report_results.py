@@ -3,8 +3,8 @@ import numpy as np
 import os
 
 
-train_set = 'cxr_a'
-test_set = 'chexpert'
+train_set = 'cxr_p'
+test_set = 'cxr_p'
 results_dir = f'/mnt/gaze_robustness_results/resnet_only/train_set_{train_set}/test_set_{test_set}'
 
 #results_dir = f'/mnt/gaze_robustness_results'
@@ -60,7 +60,7 @@ for cv in seeds:
 
     with open(res_file) as data_file:
         results = json.load(data_file)
-        means.append(results['test_auroc'])
+        means.append(results['test_acc'])
 
 
 print(f"\nMean Auroc: {np.mean(means):.3f}")
