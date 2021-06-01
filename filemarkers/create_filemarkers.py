@@ -8,14 +8,14 @@ def create_chexpert_filemarker(dset,shift):
     if shift == 'hospital':
 
         if dset == "a":
-            test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_mean_55.903_shift_chexpert_test_cxra.csv"
+            test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_mean_55.395_shift_chexpert_test_cxra.csv"
             save_dir = "./chexpert/cxr_a/hospital"
         else:
             test_file = "/home/jsparmar/test_data/CXR-P Splits/hospital_mean_51.126_shift_chexpert_test_cxrp.csv"
             save_dir = "./chexpert/cxr_p/hospital"
     else:
         if dset == "a":
-            test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_age_mean_78.975_shift_chexpert_test_cxra.csv"
+            test_file = "/home/jsparmar/test_data/CXR-A Splits/hospital_age_mean_89.602_shift_chexpert_test_cxra.csv"
             save_dir = "./chexpert/cxr_a/hospital_age"
         else:
             test_file = "/home/jsparmar/test_data/CXR-P Splits/hospital_age_mean_78.561_shift_chexpert_test_cxrp.csv"
@@ -220,7 +220,7 @@ def create_chestxray8_filemarker(dset= "a", shift = 'hospital'):
     
 ## cxr-p
 def create_mimic_cxr_filemarker():
-    base_dir = "/media/physionet.org/files/mimic-cxr-jpg/2.0.0/files/"
+    base_dir = "/mnt/physionet.org/files/mimic-cxr-jpg/2.0.0/files/"
     test_file = "/home/jsparmar/test_data/CXR-P Splits/hospital_shift_mimicxr_test_cxrp.csv"
     all_file_markers = []
     labs = []

@@ -82,9 +82,14 @@ class RoboGazeDataset(Dataset):
             img = ds.pixel_array
             img = Image.fromarray(np.uint8(img))
 
+   
         img = self.transform(img)
+        
         if img.shape[0] == 1:
             img = torch.cat([img, img, img])
+
+        if img.shape[0] == 4:
+            img = img[:3] 
 
         return img, label 
 
@@ -135,7 +140,12 @@ def fetch_dataloaders(
 
 if __name__ == "__main__":
     
-    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
+    dls = fetch_dataloaders("cxr_a","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
+
+    #dataiter = iter(dls['test'])
+
+    #for i in range(4607):
+        #images, labels = dataiter.next()
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 

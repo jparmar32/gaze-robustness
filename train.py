@@ -26,6 +26,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=25, help="Number of training epochs")
     parser.add_argument("--min_lr", type=float, default=0, help="Minimum learning rate")
+    parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate")
+    parser.add_argument("--wd", type=float, default=0.0001, help="L2 Weight")
     parser.add_argument("--save_model", action='store_true', help="Whether to save the best model found or not") ##will be false unles flag is specified
     parser.add_argument("--checkpoint_dir", type=str, default=None, help="Whether to use a given saved model")
     parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
@@ -33,7 +35,7 @@ def parse_args():
 
     parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p'], required=True, help="Set to train on")
     parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8'], required=True, help="Test set to evaluate on")
-    parser.add_argument("--ood_shift", type=str, choices=['age','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
+    parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")
 
@@ -243,7 +245,8 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        optimizer = optim.Adam(params_to_update, lr=0.0001, weight_decay=0.0001)
+        print(f"lr: {args.lr} and l2: {args.wd} and seed {args.seed}")
+        optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)
 
@@ -270,7 +273,7 @@ def main():
 
         save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
-        save_res = save_res + "/result.json"
+        save_res = save_res + "/results.json"
 
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
@@ -285,6 +288,7 @@ def main():
         model.load_state_dict(torch.load(args.checkpoint_dir))
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
+        print(f"evaluating on {args.test_set}:")
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], loss_fn=nn.CrossEntropyLoss())
         print(f"Best Test Auroc {test_auroc}")
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
@@ -294,7 +298,7 @@ def main():
         
         save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
-        save_res = save_res + "/result.json"
+        save_res = save_res + "/results.json"
 
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
