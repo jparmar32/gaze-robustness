@@ -270,14 +270,14 @@ def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, retur
     return gaze_seqs, labels, gaze_ids
 
 
-def load_gaze_attribute_labels(source, split_type, task):
+def load_gaze_attribute_labels(source, split_type, task, seed):
     """
     Creates helper task labels depending on gaze_mtl_task
     options are: loc1, loc2, time, diffusivity
     """
 
     # pull all gaze sequences
-    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, 0)
+    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, seed)
     # create task_labels dict
     task_labels = {}
     for ndx,gaze_id in enumerate(gaze_ids):
@@ -287,7 +287,7 @@ def load_gaze_attribute_labels(source, split_type, task):
     if task == "heatmap1":
         grid_size = 4 #3
     else:
-        grid_size = 3 #2 
+        grid_size = 7 #2 
 
  
     heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)

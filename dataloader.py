@@ -63,7 +63,7 @@ class RoboGazeDataset(Dataset):
                 type_feature = "heatmap1"
             else:
                 type_feature = "heatmap2"
-            gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature)
+            gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed)
             self.gaze_features = gaze_attribute_labels_dict
 
 
@@ -192,12 +192,12 @@ def fetch_dataloaders(
 if __name__ == "__main__":
     
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, gaze_task="data_augment")
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="data_augment")
 
-    dataiter = iter(dls['train'])
+    dataiter = iter(dls['val'])
 
-    for i in range(1):
-        images, labels, subclass_label = dataiter.next()
+    for i in range(191):
+        images, labels, gaze = dataiter.next()
 
         #print(subclass_label)
     # for (img,label) in dls[0]:

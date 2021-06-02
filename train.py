@@ -381,6 +381,8 @@ def main():
             min_acc = min(save_dict['test_acc'].values())
             min_auc = min(save_dict['test_auroc'].values())
             save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+        elif args.ood_shift is not None:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
@@ -416,6 +418,8 @@ def main():
             min_acc = min(save_dict['test_acc'].values())
             min_auc = min(save_dict['test_auroc'].values())
             save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+        elif args.ood_shift is not None:
+            save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
         
