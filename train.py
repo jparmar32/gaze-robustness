@@ -325,6 +325,9 @@ def main():
     else:
         loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
+    if args.gaze_task is not None:
+        print(f"Running a gaze experiment: {args.gaze_task}")
+
 
     num_classes = args.num_classes #loaders["train"].dataset.num_classes
 
