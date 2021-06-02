@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
     parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', None], default=None, help="Type of gaze enhanced expeeriment to try out")
-    parser.add_argument("--cam_weight", type=int, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
+    parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
     args = parser.parse_args()

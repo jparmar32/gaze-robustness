@@ -67,7 +67,6 @@ class RoboGazeDataset(Dataset):
             self.gaze_features = gaze_attribute_labels_dict
 
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
-            print(self.average_heatmap.shape)
 
     def __len__(self):
         return len(self.file_markers)
@@ -202,15 +201,15 @@ if __name__ == "__main__":
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
     dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
 
-    dataiter = iter(dls['val'])
+    '''dataiter = iter(dls['val'])
 
     for i in range(1):
         images, labels, gaze = dataiter.next()
-        print(gaze)
+    
 
         #print(subclass_label)
     # for (img,label) in dls[0]:
-    #     pdb.set_trace()
+    #     pdb.set_trace()'''
 
 
 
