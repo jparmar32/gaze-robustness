@@ -8,7 +8,7 @@ from torchvision.transforms import transforms
 from PIL import Image
 import pydicom
 
-from utils import load_file_markers, get_data_transforms
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels
 
 
 class RoboGazeDataset(Dataset):
@@ -24,6 +24,7 @@ class RoboGazeDataset(Dataset):
         data_dir,
         split_type,
         transform,
+        gaze_task = None,
         val_scale=0.2,
         seed=0,
         subclass=False
@@ -37,7 +38,7 @@ class RoboGazeDataset(Dataset):
         """
 
         self.source = source
-
+        self.gaze_task = gaze_task
         self.ood = False
         if self.source not in ['cxr_a', 'cxr_p']:
             self.ood = True
@@ -54,6 +55,16 @@ class RoboGazeDataset(Dataset):
             seed,
             subclass=self.subclass
         )
+
+        if self.split_type in ['train', 'val']:
+
+            type_feature = None
+            if self.gaze_task == "data_augmeent":
+                type_feature = "heatmap1"
+            else:
+                type_feature = "heatmap2"
+            gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature)
+            self.gaze_features = gaze_attribute_labels_dict
 
     def __len__(self):
         return len(self.file_markers)
@@ -85,8 +96,6 @@ class RoboGazeDataset(Dataset):
 
             if self.subclass:
                 subclass_label = 1 if cxr_tube_dict[image_name] is True else 0
-            else:
-                subclass_label = np.random.randint(0, 2)
 
         else:
             img_pth = img_id
@@ -104,10 +113,25 @@ class RoboGazeDataset(Dataset):
         if img.shape[0] == 1:
             img = torch.cat([img, img, img])
 
-        if img.shape[0] == 4:
+        if img.shape[0] >= 4:
             img = img[:3] 
 
-        return img, label, subclass_label 
+        if self.split_type in ['train', 'val']:
+
+            if self.gaze_task == "data_augment":
+
+                #make 224 w/ blah
+                #bianry mask of 1 0
+                #multiply w/ shit
+                #need to 0 out the img in all patches correspondingly
+
+                pass
+
+            gaze_attribute = self.gaze_features[img_id]
+            return img, label, gaze_attribute
+
+        else:
+            return img, label, subclass_label
 
 
 
@@ -118,6 +142,7 @@ def fetch_dataloaders(
     seed,
     batch_size,
     num_workers,
+    gaze_task = None, #either none, data augment, cam reg, cam reg convex
     ood_set = None,
     ood_shift = None,
     subclass = False
@@ -133,11 +158,11 @@ def fetch_dataloaders(
             if split == "test":
                 source = f"{ood_set}/{source}/{ood_shift}"
 
-        print(subclass)
         dataset = RoboGazeDataset(
             source=source,
             data_dir=data_dir,
             split_type=split,
+            gaze_task = gaze_task,
             transform=transforms[split],
             val_scale=val_scale,
             seed=seed,
@@ -159,9 +184,9 @@ def fetch_dataloaders(
 if __name__ == "__main__":
     
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, subclass=True)
+    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4)
 
-    dataiter = iter(dls['train'])
+    dataiter = iter(dls['test'])
 
     for i in range(1):
         images, labels, subclass_label = dataiter.next()

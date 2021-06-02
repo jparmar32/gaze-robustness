@@ -189,3 +189,113 @@ def build_scheduler(args, optimizer):
     scheduler_type = partial(CosineScheduler, T_max=args.epochs, eta_min=args.min_lr)
     scheduler = scheduler_type(optimizer)
     return scheduler
+
+def make_heatmaps(gaze_seqs, num_patches=8, normalize_heatmaps=False):
+    all_grids = np.zeros((len(gaze_seqs), 1, num_patches, num_patches), dtype=np.float32)
+    for ndx, gaze_seq in enumerate(gaze_seqs):
+        # loop through gaze seq and increment # of visits to each patch
+        for (x,y,t) in gaze_seq:
+            # make sure if x or y are > 1 then they are 1
+            x, y = np.clip([x, y], 0., 0.999)
+            patch_x, patch_y = int(x*num_patches), int(y*num_patches)
+            all_grids[ndx, 0, patch_x, patch_y] += t
+        if normalize_heatmaps:
+            # Destroy total time information, as a diagnostic
+            all_grids[ndx] /= np.sum(all_grids[ndx])
+    return all_grids
+
+
+def compute_avg_heatmap(gaze_seqs, grid_width = 8):
+    
+    heatmaps = []
+    for gaze_seq in gaze_seqs:
+        
+        hm = [0] * grid_width * grid_width
+        for x, y, t in gaze_seq:
+            x = min(max(0, x), 0.9999)
+            y = min(max(0, y), 0.9999)
+            idx = int(x * grid_width) * grid_width + int(y * grid_width)
+            hm[idx] += t
+            
+        heatmaps.append(hm)
+        
+    heatmaps = np.array(heatmaps)
+        
+    return np.mean(heatmaps,axis=0)
+
+
+def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, return_img_pths=False, verbose=True):
+    """
+    Returns: a dictionary of (gaze_id: gaze_seq) for the split type and source
+    """
+
+    gaze_dict_pth = os.path.join('/home/jsparmar/gaze-robustness/gaze_data', source + '_gaze_data.pkl')
+
+    with open(gaze_dict_pth, 'rb') as pkl_f:
+        gaze_dict_all = pickle.load(pkl_f)
+
+    # load file markers for split to know which gaze sequences to return
+    
+    file_markers = load_file_markers(source, split_type, False, val_scale, seed, False)
+
+    gaze_seqs = []
+    labels = []
+    gaze_ids = []
+    img_pths = []
+    for img_pth, lab in file_markers:
+        img_pths.append(img_pth)
+        labels.append(lab)
+
+        # extract gaze_id from img_pth
+
+        # get gaze seq
+        if img_pth in gaze_dict_all:
+         
+            gaze_ids.append(img_pth)
+
+            if gaze_dict_all[img_pth] == []:
+                gaze_seqs.append([[0.5,0.5,1]])
+            else:
+                gaze_seqs.append(gaze_dict_all[img_pth])
+        else:
+            gaze_seqs.append([[0.5,0.5,1]])
+
+    gaze_seqs = np.array(gaze_seqs, dtype=object)
+    labels = np.array(labels)
+    gaze_ids = np.array(gaze_ids)
+    if verbose: print(f'{len(gaze_seqs)} gaze sequences in {split_type} split...')
+
+    if return_img_pths:
+        return gaze_seqs, labels, img_pths
+    return gaze_seqs, labels, gaze_ids
+
+
+def load_gaze_attribute_labels(source, split_type, task):
+    """
+    Creates helper task labels depending on gaze_mtl_task
+    options are: loc1, loc2, time, diffusivity
+    """
+
+    # pull all gaze sequences
+    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, 0)
+    # create task_labels dict
+    task_labels = {}
+    for ndx,gaze_id in enumerate(gaze_ids):
+        task_labels[gaze_id] = []
+    
+    
+    if task == "heatmap1":
+        grid_size = 4 #3
+    else:
+        grid_size = 3 #2 
+
+
+    #test = make_heatmaps(seqs, grid_size)
+ 
+    heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)
+            #seg_masks = load_seg_masks(source)
+    for ndx,gaze_id in enumerate(gaze_ids):
+        task_labels[gaze_id].append(heatmaps[ndx,:].T/np.sum(heatmaps[ndx,:]))
+    
+    return task_labels
+        

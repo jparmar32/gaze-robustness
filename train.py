@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', None], default=None, help="Type of gaze enhanced expeeriment to try out")
+
     args = parser.parse_args()
     return args
 
@@ -209,7 +211,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
     model.train()
     for batch_idx, batch in enumerate(loader):
 
-        inputs, targets, subclass_labels = batch
+        inputs, targets, gaze_attribute = batch
 
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
@@ -319,9 +321,9 @@ def main():
     #load in data loader
 
     if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, ood_set= args.test_set, ood_shift = args.ood_shift)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift)
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, subclass=args.subclass_eval)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
 
     num_classes = args.num_classes #loaders["train"].dataset.num_classes
