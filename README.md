@@ -8,10 +8,141 @@ To train and evaluate models with this repo, one only needs to call the `./run_t
 
 #### Image Only Architecture (Resnet 50):
 
+To train a model:
+
+```
+#!/bin/sh
+train="cxr_p"
+test="cxr_p"
+
+for seed in 0 1 2 3 4 5 6 7 8 9 
+do
+  
+    python ./train.py \
+        --epochs 15 \
+        --min_lr 0 \
+        --lr .0001 \
+        --wd .1 \
+        --seed $seed \
+        --batch_size 32 \
+        --train_set $train \
+        --test_set $test \
+        --save_dir "/mnt/gaze_robustness_results/resnet_only" \
+        --save_model            
+done
+
+```
+
+To evaluate on an o.o.d set:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while changing the test set variable to the desired o.o.d test set. Make sure to also include the `--ood_shift` flag with one of the following: `hospital`, `hospital_age`, `age` depending on the given test set.
+
+To evaluate worst subclass performance:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while also adding in the flag `subclass_eval`. Make sure that the train and test set are both `cxr_p` in this case. 
+
 #### Gaze Data Augmentation:
+To train a model: 
+```
+#!/bin/sh
+train="cxr_p"
+test="cxr_p"
+
+for seed in 0 1 2 3 4 5 6 7 8 9 
+do
+  
+    python ./train.py \
+        --epochs 15 \
+        --min_lr 0 \
+        --lr .0001 \
+        --wd .1 \
+        --seed $seed \
+        --batch_size 32 \
+        --train_set $train \
+        --test_set $test \
+        --save_dir "/mnt/gaze_robustness_results/gaze_data_augmentation" \
+        --gaze_task "data_augmentation" \
+      
+done
+```
+
+To evaluate on an o.o.d set:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while changing the test set variable to the desired o.o.d test set. Make sure to also include the `--ood_shift` flag with one of the following: `hospital`, `hospital_age`, `age` depending on the given test set.
+
+To evaluate worst subclass performance:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while also adding in the flag `subclass_eval`. Make sure that the train and test set are both `cxr_p` in this case. 
+
 
 #### CAM Regularization with Gaze Heatmap: 
 
+To train a model: 
+```
+#!/bin/sh
+train="cxr_p"
+test="cxr_p"
+
+for seed in 0 1 2 3 4 5 6 7 8 9 
+do
+  
+    python ./train.py \
+        --epochs 15 \
+        --min_lr 0 \
+        --lr .0001 \
+        --wd .1 \
+        --seed $seed \
+        --batch_size 32 \
+        --train_set $train \
+        --test_set $test \
+        --save_dir "/mnt/gaze_robustness_results/gaze_cam_reg" \
+        --gaze_task "cam_reg" \
+        --cam_weight 1 \
+      
+done
+```
+
+To evaluate on an o.o.d set:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while changing the test set variable to the desired o.o.d test set. Make sure to also include the `--ood_shift` flag with one of the following: `hospital`, `hospital_age`, `age` depending on the given test set.
+
+To evaluate worst subclass performance:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while also adding in the flag `subclass_eval`. Make sure that the train and test set are both `cxr_p` in this case. 
+
 #### CAM Regularization with Convex Combinatiton of Image Specific Gaze Heatmap and Average Gaze Heatmap:
 
+To train a model: 
 
+```
+#!/bin/sh
+train="cxr_p"
+test="cxr_p"
+
+for seed in 0 1 2 3 4 5 6 7 8 9 
+do
+  
+    python ./train.py \
+        --epochs 15 \
+        --min_lr 0 \
+        --lr .0001 \
+        --wd .1 \
+        --seed $seed \
+        --batch_size 32 \
+        --train_set $train \
+        --test_set $test \
+        --save_dir "/mnt/gaze_robustness_results/gaze_cam_reg_convex" \
+        --gaze_task "cam_reg_convex" \
+        --cam_weight 1 \
+        --cam_convex_alpha 0.5 \
+      
+done
+```
+
+To evaluate on an o.o.d set:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while changing the test set variable to the desired o.o.d test set. Make sure to also include the `--ood_shift` flag with one of the following: `hospital`, `hospital_age`, `age` depending on the given test set.
+
+To evaluate worst subclass performance:
+
+Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while also adding in the flag `subclass_eval`. Make sure that the train and test set are both `cxr_p` in this case. 
