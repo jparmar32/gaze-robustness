@@ -1,6 +1,6 @@
 # Improving Model Generalization With Gaze
 
-We explore the utility of human gaze sequeences in creating more robust models. Specifically, we posit that incorporating gaze information will reduce reliance on spurious correlates. This repo contains the code to run all gaze relate experiments. Specifically, it has the ability to train a gaze model and then test it on o.o.d datasets (chexpert, mimic cxr, chestxray8) or evaluate the worst case subgroup performance in the test set. 
+We explore the utility of human gaze sequeences in creating more robust models. Specifically, we posit that incorporating gaze information will reduce reliance on spurious corelates. This repo contains the code to run all gaze relate experiments. Specifically, it has the ability to train a gaze model and then test it on o.o.d datasets (chexpert, mimic cxr, chestxray8) or evaluate the worst case subgroup performance in the test set. 
 
 ### Running Experiments 
 
