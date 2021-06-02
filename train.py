@@ -7,6 +7,7 @@ import sys
 import warnings
 import sklearn.metrics as skl
 import json
+import math
 
 
 import matplotlib.pyplot as plt
@@ -21,6 +22,7 @@ import copy
 from dataloader import fetch_dataloaders
 
 from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs
+from models.extract_CAM import get_CAM_from_img
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -42,6 +44,8 @@ def parse_args():
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
     parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', None], default=None, help="Type of gaze enhanced expeeriment to try out")
+    parser.add_argument("--cam_weight", type=int, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
+    parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
     args = parser.parse_args()
     return args
@@ -202,7 +206,7 @@ def evaluate(
         saved = probs_cat if save_type == "probs" else logits_cat
         return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True):
+def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None):
 
 
     loss_meter, acc_meter = [AverageMeter()]*2
@@ -211,7 +215,8 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
     model.train()
     for batch_idx, batch in enumerate(loader):
 
-        inputs, targets, gaze_attribute = batch
+        #gaze_attribute here is tthe heatmap
+        inputs, targets, gaze_attributes = batch
 
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
@@ -225,7 +230,43 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
             logits, attn = output, None
 
         c_loss = loss_fn(logits, targets)
-        loss = c_loss
+
+
+        a_loss = 0
+        if cam_weight:
+            n = len(targets)
+            cum_losses = logits.new_zeros(n)
+            for i in range(n):
+                image = inputs[i,...]
+                cam = get_CAM_from_img(image, model, targets[i].cpu())
+
+                if gaze_task == "cam_reg_convex":
+                    eye_hm = gaze_attributes['gaze_attribute'][i,...]
+                    eye_hm = cam_convex_alpha*eye_hm + (1 - cam_convex_alpha)*gaze_attributes['average_hm'][i,...]
+                else:
+                    eye_hm = gaze_attributes[i,...]
+
+
+                
+
+
+                if len(eye_hm.shape) != 2:
+                    eye_hm = eye_hm.reshape(int(math.sqrt(eye_hm.shape[0])),int(math.sqrt(eye_hm.shape[0])))
+
+                if eye_hm.shape != cam.shape:
+                    pool_dim = int(eye_hm.shape[0] / cam.shape[0])
+                    eye_hm = nn.functional.avg_pool2d(eye_hm.unsqueeze(0).unsqueeze(0), pool_dim).squeeze()
+                eye_hm_norm = eye_hm / eye_hm.sum()
+                cam_normalized = cam / cam.sum()
+                eye_hm_norm = eye_hm_norm.to(device="cuda:0")
+                cam_normalized = cam_normalized.to(device="cuda:0")
+                if not (torch.isnan(cam_normalized).any() or torch.isnan(eye_hm_norm).any()):
+                    cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
+            a_loss = cum_losses.sum()
+
+
+        loss = c_loss + a_loss
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -281,6 +322,9 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             optimizer,
             loss_fn=loss_fn,
             use_cuda=use_cuda,
+            cam_weight=args.cam_weight,
+            cam_convex_alpha=args.cam_convex_alpha,
+            gaze_task=args.gaze_task
         )
 
         val_loss, val_acc, val_auroc, _, _= evaluate(

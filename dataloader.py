@@ -66,6 +66,8 @@ class RoboGazeDataset(Dataset):
             gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed)
             self.gaze_features = gaze_attribute_labels_dict
 
+            self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
+            print(self.average_heatmap.shape)
 
     def __len__(self):
         return len(self.file_markers)
@@ -120,6 +122,7 @@ class RoboGazeDataset(Dataset):
         if self.split_type in ['train', 'val']:
             
             gaze_attribute = self.gaze_features[img_id][0]
+            
 
             if self.gaze_task == "data_augment":
 
@@ -135,6 +138,11 @@ class RoboGazeDataset(Dataset):
                 gaze_binary_mask = gaze_binary_mask.unsqueeze(0)
                 gaze_binary_mask= torch.cat([gaze_binary_mask, gaze_binary_mask, gaze_binary_mask])
                 img = img*gaze_binary_mask
+
+            if self.gaze_task == "cam_reg_convex":
+                gaze_attribute_dict = {"gaze_attribute": gaze_attribute, "average_hm":self.average_heatmap}
+
+                return img, label, gaze_attribute_dict
             
             return img, label, gaze_attribute
 
@@ -192,12 +200,13 @@ def fetch_dataloaders(
 if __name__ == "__main__":
     
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="data_augment")
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
 
     dataiter = iter(dls['val'])
 
-    for i in range(191):
+    for i in range(1):
         images, labels, gaze = dataiter.next()
+        print(gaze)
 
         #print(subclass_label)
     # for (img,label) in dls[0]:
