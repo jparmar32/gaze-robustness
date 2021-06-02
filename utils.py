@@ -289,8 +289,6 @@ def load_gaze_attribute_labels(source, split_type, task):
     else:
         grid_size = 3 #2 
 
-
-    #test = make_heatmaps(seqs, grid_size)
  
     heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)
             #seg_masks = load_seg_masks(source)

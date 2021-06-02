@@ -59,12 +59,13 @@ class RoboGazeDataset(Dataset):
         if self.split_type in ['train', 'val']:
 
             type_feature = None
-            if self.gaze_task == "data_augmeent":
+            if self.gaze_task == "data_augment":
                 type_feature = "heatmap1"
             else:
                 type_feature = "heatmap2"
             gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature)
             self.gaze_features = gaze_attribute_labels_dict
+
 
     def __len__(self):
         return len(self.file_markers)
@@ -117,17 +118,24 @@ class RoboGazeDataset(Dataset):
             img = img[:3] 
 
         if self.split_type in ['train', 'val']:
+            
+            gaze_attribute = self.gaze_features[img_id][0]
 
             if self.gaze_task == "data_augment":
 
-                #make 224 w/ blah
-                #bianry mask of 1 0
-                #multiply w/ shit
-                #need to 0 out the img in all patches correspondingly
+                gaze_map = gaze_attribute.reshape(4,4)
+                gaze_binary_mask = torch.zeros(224, 224)
+                divisor = int(224/4)
 
-                pass
+                for i in range(4):
+                    for j in range(4):
+                        if gaze_map[i,j] != 0:
+                            gaze_binary_mask[(divisor)*(i):(divisor)*(i+1),(divisor)*(j):(divisor)*(j+1)] = torch.ones(divisor,divisor)
 
-            gaze_attribute = self.gaze_features[img_id]
+                gaze_binary_mask = gaze_binary_mask.unsqueeze(0)
+                gaze_binary_mask= torch.cat([gaze_binary_mask, gaze_binary_mask, gaze_binary_mask])
+                img = img*gaze_binary_mask
+            
             return img, label, gaze_attribute
 
         else:
@@ -184,14 +192,14 @@ def fetch_dataloaders(
 if __name__ == "__main__":
     
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4)
+    dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, gaze_task="data_augment")
 
-    dataiter = iter(dls['test'])
+    dataiter = iter(dls['train'])
 
     for i in range(1):
         images, labels, subclass_label = dataiter.next()
 
-        print(subclass_label)
+        #print(subclass_label)
     # for (img,label) in dls[0]:
     #     pdb.set_trace()
 
