@@ -4,14 +4,14 @@ We explore the utility of human gaze sequeences in creating more robust models. 
 
 ### Running Experiments 
 
-To train and evaluate models with this repo, one only needs to call the `./run_train.sh` script. Specifically, in this set one must specificy a train set, typically it is `cxr_p` which has gaze data associaetd with it, and additionally specify the test set. The test set can be the same as the train set if one wishes to evaluate i.i.d test set performance or to evaluate worst case subgroup performance. It can be different from the train set, either `mimic_cxr`, `chestxray8`, or `chexpert`, to evaluatet o.o.d performance. Specific commands for given architectures are specified below.
+To train and evaluate models with this repo, one only needs to call the `./run_train.sh` script. Specifically, in this set one must specificy a train set, typically it is `cxr_p` which has gaze data associaetd with it, and additionally specify the test set. The test set can be the same as the train set if one wishes to evaluate i.i.d test set performance or to evaluate worst case subgroup performance. It can be different from the train set, either `mimic_cxr`, `chestxray8`, or `chexpert`, to evaluatet o.o.d performance. Specific configurations/args of `./run_train.sh` for given architectures are specified below.
 
-#### Image Only Architecture (Resnet 50)
+#### Image Only Architecture (Resnet 50):
 
-#### Gaze Data Augmentation 
+#### Gaze Data Augmentation:
 
-#### CAM Regularization with Gaze Heatmap 
+#### CAM Regularization with Gaze Heatmap: 
 
-#### CAM Regularization with Convex Combinatiton of Image Specific Gaze Heatmap and Average Gaze Heatmap
+#### CAM Regularization with Convex Combinatiton of Image Specific Gaze Heatmap and Average Gaze Heatmap:
 
 
