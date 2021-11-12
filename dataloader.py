@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import transforms
 from PIL import Image
 import pydicom
+import torchvision
 
 from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels
 
@@ -27,7 +28,8 @@ class RoboGazeDataset(Dataset):
         gaze_task = None,
         val_scale=0.2,
         seed=0,
-        subclass=False
+        subclass=False,
+        gan = False
     ):
 
         """
@@ -43,6 +45,7 @@ class RoboGazeDataset(Dataset):
         if self.source not in ['cxr_a', 'cxr_p']:
             self.ood = True
 
+        self.gan = gan
         self.data_dir = data_dir
         self.split_type = split_type
         self.transform = transform
@@ -112,11 +115,16 @@ class RoboGazeDataset(Dataset):
    
         img = self.transform(img)
         
-        if img.shape[0] == 1:
-            img = torch.cat([img, img, img])
+        if not self.gan:
+            if img.shape[0] == 1:
+                img = torch.cat([img, img, img])
 
         if img.shape[0] >= 4:
             img = img[:3] 
+
+        if self.gan:
+            return img, label
+
 
         if self.split_type in ['train', 'val']:
             
@@ -196,21 +204,80 @@ def fetch_dataloaders(
     return dataloaders
 
 
+def fetch_entire_dataloader(source,
+    data_dir,
+    val_scale,
+    seed,
+    batch_size,
+    num_workers,
+    gaze_task = None, #either none, data augment, cam reg, cam reg convex
+    ood_set = None,
+    ood_shift = None,
+    subclass = False,
+    gan = True):
+
+    transforms = get_data_transforms("cxr", normalization_type="train_images", gan = gan)
+
+    datasets = []
+    for split in ["train", "val", "test"]:
+
+        if ood_set is not None:
+            if split == "test":
+                source = f"{ood_set}/{source}/{ood_shift}"
+
+        dataset = RoboGazeDataset(
+            source=source,
+            data_dir=data_dir,
+            split_type=split,
+            gaze_task = gaze_task,
+            transform=transforms[split],
+            val_scale=val_scale,
+            seed=seed,
+            subclass=subclass,
+            gan=gan
+        )
+
+        datasets.append(dataset)
+
+
+    concat_datasets = torch.utils.data.ConcatDataset(datasets)
+
+    return DataLoader(
+                dataset=concat_datasets,
+                shuffle=True,
+                batch_size=batch_size,
+                num_workers=num_workers,
+            )
+
+
 if __name__ == "__main__":
     
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
-
-    '''dataiter = iter(dls['val'])
-
+    #dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
+    dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex", gan = True)
+    print(len(dl.dataset))
+    dataiter = iter(dl)
     for i in range(1):
-        images, labels, gaze = dataiter.next()
+        images, labels = dataiter.next()
+        print(images.shape)
+        grid_img = torchvision.utils.make_grid(images, nrow=8)
+        torchvision.utils.save_image(grid_img, 'downsamped_cxr.png')
+
+    #dataiter = iter(dls['val'])
+
+    #for i in range(1):
+        #images, labels, gaze = dataiter.next()
+        #print(len(dls['val'].dataset))
+        #print(images[0, 0:10, 0:10])
+        #print(images[1, 0:10, 0:10])
     
 
         #print(subclass_label)
     # for (img,label) in dls[0]:
     #     pdb.set_trace()'''
 
+
+## dataloader for gan, downsample and 1 
 
 
 
