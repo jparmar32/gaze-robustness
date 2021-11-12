@@ -1,6 +1,6 @@
 # Improving Model Generalization With Gaze
 
-We explore the utility of human gaze sequeences in creating more robust models. Specifically, we posit that incorporating gaze information will reduce reliance on spurious correlates. This repo contains the code to run all gaze relate experiments. Specifically, it has the ability to train a gaze model and then test it on o.o.d datasets (chexpert, mimic cxr, chestxray8) or evaluate the worst case subgroup performance in the test set. 
+We explore the utility of human gaze sequeences in creating more robust models. Specifically, we posit that incorporating gaze information will reduce reliance on spurious corelates. This repo contains the code to run all gaze relate experiments. Specifically, it has the ability to train a gaze model and then test it on o.o.d datasets (chexpert, mimic cxr, chestxray8) or evaluate the worst case subgroup performance in the test set. 
 
 ### Running Experiments 
 
@@ -146,3 +146,14 @@ Simply add the flag `--checpkpoint_dir` with the specified location of the saved
 To evaluate worst subclass performance:
 
 Simply add the flag `--checpkpoint_dir` with the specified location of the saved model from training to the script above while also adding in the flag `subclass_eval`. Make sure that the train and test set are both `cxr_p` in this case. 
+
+
+### DANN
+
+To run the DANN model, first one needs to switch to the DANN branch of this repository. Then, to train a DANN model on CXR-P with the target distribution being a given o.o.d set they simply need to update the parameters of the function `dann_run` inside `experiments/dann_gaze.py` accordingly. For example, if one wanted to use the target domain of CheXpert with the hospital shif they would set the parameters to be:
+
+```
+dann_run(src_name=”cxr_p", tgt_name=”chexpert_hospital", ood_set=”chexpert", ood_shift=”hospital", dl_seed=0)
+```
+
+One can then train and evlauate the model by calling `python experiments/dann_gaze.py` from the command line. 
