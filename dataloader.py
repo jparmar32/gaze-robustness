@@ -261,7 +261,7 @@ if __name__ == "__main__":
         images, labels = dataiter.next()
         print(images.shape)
         grid_img = torchvision.utils.make_grid(images, nrow=8)
-        torchvision.utils.save_image(grid_img, 'downsamped_cxr.png')
+        torchvision.utils.save_image(grid_img, 'downsampled_cxr.png')
 
     #dataiter = iter(dls['val'])
 

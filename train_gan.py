@@ -101,3 +101,6 @@ for epoch in range(100):
 
         grid_img = torchvision.utils.make_grid(gen_imgs, nrow=11)
         torchvision.utils.save_image(grid_img, f'./gan/generated_images_ckpt_{epoch}_cxr.png')
+
+torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
+torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
