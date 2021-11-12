@@ -4,12 +4,13 @@ import os
 
 
 train_set = 'cxr_p'
-test_set = 'cxr_p'
-ood_shift = None
-subclass_eval = True
-results_dir = f'/mnt/gaze_robustness_results/gaze_data_augmentation/train_set_{train_set}/test_set_{test_set}'
+test_set = 'chestxray8'
+ood_shift = "age"
+subclass_eval = None
+gaze_task = "cam_reg_convex"
+results_dir = f'/mnt/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}'
 if ood_shift is not None:
-    results_dir = f'/mnt/gaze_robustness_results/gaze_data_augmentation/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'/mnt/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
@@ -18,7 +19,9 @@ if subclass_eval:
 
 seeds = [x for x in range(10)] 
 lrs = [.01, .001, .0001]
-wds = [1, .1, .01, .001, .0001, 0]
+wds = [1, .1, .01, .001, .0001]
+
+#no .0001
 
 
 '''#for each lr, wd combo gget all seeds, then give results of highest 
@@ -67,7 +70,7 @@ for cv in seeds:
 
     with open(res_file) as data_file:
         results = json.load(data_file)
-        means.append(results['test_acc'])
+        means.append(results['test_auroc'])
 
 
 print(f"\nMean Auroc: {np.mean(means):.3f}")
