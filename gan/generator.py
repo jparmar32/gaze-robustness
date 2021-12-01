@@ -92,7 +92,7 @@ class Generator_Advanced_64(nn.Module):
             
             # Output Layer
             nn.ConvTranspose2d(in_channels=64, 
-                               out_channels=1,
+                               out_channels=3,
                                kernel_size=4,
                                stride=2,
                                padding=1,

@@ -73,7 +73,6 @@ for epoch in range(100):
 
         # Loss measures generator's ability to fool the discriminator
         g_loss = adversarial_loss(discriminator(gen_imgs), valid)
-
         g_loss.backward()
         optimizer_G.step()
 
@@ -84,6 +83,7 @@ for epoch in range(100):
         optimizer_D.zero_grad()
 
         # Measure discriminator's ability to classify real from generated samples
+        # print(real_imgs.shape)
         real_loss = adversarial_loss(discriminator(real_imgs), valid)
         fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
         d_loss = (real_loss + fake_loss) / 2

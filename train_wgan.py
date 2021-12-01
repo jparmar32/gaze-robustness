@@ -16,8 +16,8 @@ import torch
 
 from tqdm import tqdm
 
-from gan.generator import Generator_Advanced_64, Generator_Basic
-from gan.discriminator import Discriminator_Advanced_64, Discriminator_Basic
+from wgan.generator import Generator_Advanced_64, Generator_Basic
+from wgan.discriminator import Discriminator_Advanced_64, Discriminator_Basic
 from dataloader import fetch_entire_dataloader
 
 cuda = True if torch.cuda.is_available() else False
@@ -45,6 +45,7 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
 for epoch in range(100):
     for i, (imgs, _) in tqdm(enumerate(dl), total = len(dl.dataset)//32 + 1):
+        # imgs = imgs[:, 1, :, :].reshape(imgs.shape[0], 1, imgs.shape[2], imgs.shape[3])
         batch_size = imgs.size(0)
 
         # Adversarial ground truths
@@ -82,8 +83,7 @@ for epoch in range(100):
         optimizer_D.zero_grad()
 
         # Measure discriminator's ability to classify real from generated samples
-        z = torch.randn((imgs.shape[0], 100, 1, 1), dtype=real_imgs.dtype, device=real_imgs.device)
-        alpha = torch.rand(imgs.shape[0], 1, 1, 1, dtype=real_imgs.dtype, device=real_imgs.device)
+        alpha = torch.rand(real_imgs.shape[0], 1, 1, 1, dtype=real_imgs.dtype, device=real_imgs.device)
         x_fake = generator(z)
         r = alpha * real_imgs + (1 - alpha) * x_fake
         d_output = discriminator(r)
@@ -93,16 +93,15 @@ for epoch in range(100):
         d_loss.backward()
         optimizer_D.step()
 
-
+    print(f"Epoch: {epoch}, Batch: {i}, D loss: {d_loss.item()}, G loss: {g_loss.item()}")
     if epoch % 10 == 0:
-        print(f"Epoch: {epoch}, Batch: {i}, D loss: {d_loss.item()}, G loss: {g_loss.item()}")
-        torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-        torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+        torch.save(generator.state_dict(), f"./wgan/generator_ckpt_{epoch}.pt")
+        torch.save(discriminator.state_dict(), f"./wgan/discriminator_ckpt_{epoch}.pt")
 
-        print(gen_imgs.shape)
+        shape = tuple(gen_imgs.shape)
 
         grid_img = torchvision.utils.make_grid(gen_imgs, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./gan/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./wgan/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+torch.save(generator.state_dict(), f"./wgan/generator_ckpt_{epoch}.pt")
+torch.save(discriminator.state_dict(), f"./wgan/discriminator_ckpt_{epoch}.pt")

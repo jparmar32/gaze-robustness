@@ -42,7 +42,7 @@ class Discriminator_Advanced_64(nn.Module):
         self.main = nn.Sequential(
             
             # (batch_size, 1, 64, 64)
-            nn.Conv2d(in_channels=1,
+            nn.Conv2d(in_channels=3,
                       out_channels=64,
                       kernel_size=4,
                       stride=2,

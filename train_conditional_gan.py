@@ -17,8 +17,8 @@ import torch
 
 from tqdm import tqdm
 
-from gan.generator import Generator_Advanced_64, Generator_Basic
-from gan.discriminator import Discriminator_Advanced_64, Discriminator_Basic
+from conditional_gan.generator import Generator_Advanced_64, Generator_Basic
+from conditional_gan.discriminator import Discriminator_Advanced_64, Discriminator_Basic
 from dataloader import fetch_entire_dataloader
 
 cuda = True if torch.cuda.is_available() else False
@@ -47,6 +47,7 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 for epoch in range(100):
     for i, (imgs, label) in tqdm(enumerate(dl), total = len(dl.dataset)//32 + 1):
         batch_size = imgs.size(0)
+        imgs = imgs[:, 1, :, :].reshape(imgs.shape[0], 1, imgs.shape[2], imgs.shape[3])
 
         # Adversarial ground truths
         valid = Tensor(imgs.size(0), 1, 1, 1).fill_(1.0)
@@ -65,13 +66,13 @@ for epoch in range(100):
 
         # Sample noise as generator input
         z = torch.randn((imgs.shape[0], 100, 1, 1), dtype=real_imgs.dtype, device=real_imgs.device)
-        
+        label = label.to(real_imgs.device)
 
         # Generate a batch of images
         gen_imgs = generator(z, label)
 
         # Loss measures generator's ability to fool the discriminator
-        g_loss = -F.logsigmoid(discriminator(gen_imgs), label).mean()
+        g_loss = -F.logsigmoid(discriminator(gen_imgs)).mean()
 
         g_loss.backward()
         optimizer_G.step()
@@ -85,8 +86,8 @@ for epoch in range(100):
         # Measure discriminator's ability to classify real from generated samples
         z = torch.randn((imgs.shape[0], 100, 1, 1), dtype=real_imgs.dtype, device=real_imgs.device)
         gen_imgs = generator(z, label)
-        d_loss_real = F.binary_cross_entropy_with_logits(discriminator(real_imgs, label), torch.ones(batch_size, device=real_imgs.device)).mean()
-        d_loss_fake = F.binary_cross_entropy_with_logits(discriminator(gen_imgs, label), torch.zeros(batch_size, device=real_imgs.device)).mean()
+        d_loss_real = F.binary_cross_entropy_with_logits(discriminator(real_imgs), torch.ones(batch_size, device=real_imgs.device)).mean()
+        d_loss_fake = F.binary_cross_entropy_with_logits(discriminator(gen_imgs), torch.zeros(batch_size, device=real_imgs.device)).mean()
         d_loss = d_loss_real + d_loss_fake
 
         d_loss.backward()
@@ -95,13 +96,13 @@ for epoch in range(100):
 
     if epoch % 10 == 0:
         print(f"Epoch: {epoch}, Batch: {i}, D loss: {d_loss.item()}, G loss: {g_loss.item()}")
-        torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-        torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+        torch.save(generator.state_dict(), f"./conditional_gan/generator_ckpt_{epoch}.pt")
+        torch.save(discriminator.state_dict(), f"./conditional_gan/discriminator_ckpt_{epoch}.pt")
 
         print(gen_imgs.shape)
 
         grid_img = torchvision.utils.make_grid(gen_imgs, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./gan/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./conditional_gan/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+torch.save(generator.state_dict(), f"./conditional_gan/generator_ckpt_{epoch}.pt")
+torch.save(discriminator.state_dict(), f"./conditional_gan/discriminator_ckpt_{epoch}.pt")
