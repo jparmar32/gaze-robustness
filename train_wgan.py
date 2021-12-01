@@ -1,4 +1,3 @@
-
 import argparse
 import os
 import numpy as np
@@ -45,7 +44,7 @@ Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 # ----------
 
 for epoch in range(100):
-    for i, (imgs, label) in tqdm(enumerate(dl), total = len(dl.dataset)//32 + 1):
+    for i, (imgs, _) in tqdm(enumerate(dl), total = len(dl.dataset)//32 + 1):
         batch_size = imgs.size(0)
 
         # Adversarial ground truths
@@ -68,10 +67,10 @@ for epoch in range(100):
         
 
         # Generate a batch of images
-        gen_imgs = generator(z, label)
+        gen_imgs = generator(z)
 
         # Loss measures generator's ability to fool the discriminator
-        g_loss = -F.logsigmoid(discriminator(gen_imgs), label).mean()
+        g_loss = -torch.mean(discriminator(gen_imgs))
 
         g_loss.backward()
         optimizer_G.step()
@@ -84,10 +83,12 @@ for epoch in range(100):
 
         # Measure discriminator's ability to classify real from generated samples
         z = torch.randn((imgs.shape[0], 100, 1, 1), dtype=real_imgs.dtype, device=real_imgs.device)
-        gen_imgs = generator(z, label)
-        d_loss_real = F.binary_cross_entropy_with_logits(discriminator(real_imgs, label), torch.ones(batch_size, device=real_imgs.device)).mean()
-        d_loss_fake = F.binary_cross_entropy_with_logits(discriminator(gen_imgs, label), torch.zeros(batch_size, device=real_imgs.device)).mean()
-        d_loss = d_loss_real + d_loss_fake
+        alpha = torch.rand(imgs.shape[0], 1, 1, 1, dtype=real_imgs.dtype, device=real_imgs.device)
+        x_fake = generator(z)
+        r = alpha * real_imgs + (1 - alpha) * x_fake
+        d_output = discriminator(r)
+        gradient_norm = torch.autograd.grad(d_output.sum(), r, create_graph=True)[0].view(batch_size, -1).norm(2, dim=1)
+        d_loss = -torch.mean(discriminator(real_imgs)) + torch.mean(discriminator(x_fake)) + 10 * torch.mean((gradient_norm - 1) ** 2)
 
         d_loss.backward()
         optimizer_D.step()
