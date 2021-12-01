@@ -115,9 +115,9 @@ class RoboGazeDataset(Dataset):
    
         img = self.transform(img)
         
-        #if not self.gan:
-        if img.shape[0] == 1:
-            img = torch.cat([img, img, img])
+        if not self.gan:
+            if img.shape[0] == 1:
+                img = torch.cat([img, img, img])
 
         if img.shape[0] >= 4:
             img = img[:3] 

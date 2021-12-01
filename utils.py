@@ -99,7 +99,7 @@ def get_data_transforms(dataset_name, normalization_type="none", gan = False):
         raise ValueError(f"Unknown normalization type {normalization_type}")
 
 
-    resize_val = 128 if gan else 224
+    resize_val = 224 if gan else 224
 
     eval_transform = transforms.Compose(
         [

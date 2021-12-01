@@ -16,8 +16,8 @@ import torch
 
 from tqdm import tqdm
 
-from gan.generator import Generator_Advanced_64, Generator_Basic
-from gan.discriminator import Discriminator_Advanced_64, Discriminator_Basic
+from gan.generator import Generator_Advanced_64, Generator_Basic, Generator_Advanced_224, Generator_Advanced_224_Basic
+from gan.discriminator import Discriminator_Advanced_64, Discriminator_Basic, Discriminator_Advanced_224, Discriminator_Advanced_224_Basic
 from dataloader import fetch_entire_dataloader
 
 cuda = True if torch.cuda.is_available() else False
@@ -26,8 +26,8 @@ cuda = True if torch.cuda.is_available() else False
 adversarial_loss = torch.nn.BCELoss()
 
 # Initialize generator and discriminator
-generator = Generator_Advanced_64()
-discriminator = Discriminator_Advanced_64()
+generator = Generator_Advanced_224_Basic()
+discriminator = Discriminator_Advanced_224_Basic()
 
 if cuda:
     generator.cuda()
@@ -70,7 +70,6 @@ for epoch in range(100):
 
         # Generate a batch of images
         gen_imgs = generator(z)
-
         # Loss measures generator's ability to fool the discriminator
         g_loss = adversarial_loss(discriminator(gen_imgs), valid)
 
@@ -94,13 +93,13 @@ for epoch in range(100):
 
     if epoch % 10 == 0:
         print(f"Epoch: {epoch}, Batch: {i}, D loss: {d_loss.item()}, G loss: {g_loss.item()}")
-        torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-        torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+        torch.save(generator.state_dict(), f"./gan/224_basic/generator_ckpt_{epoch}.pt")
+        torch.save(discriminator.state_dict(), f"./gan/224_basic/discriminator_ckpt_{epoch}.pt")
 
         print(gen_imgs.shape)
 
         grid_img = torchvision.utils.make_grid(gen_imgs, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./gan/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./gan/224_basic/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(generator.state_dict(), f"./gan/generator_ckpt_{epoch}.pt")
-torch.save(discriminator.state_dict(), f"./gan/discriminator_ckpt_{epoch}.pt")
+torch.save(generator.state_dict(), f"./gan/224_basic/generator_ckpt_{epoch}.pt")
+torch.save(discriminator.state_dict(), f"./gan/224_basic/discriminator_ckpt_{epoch}.pt")

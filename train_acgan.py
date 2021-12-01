@@ -16,9 +16,10 @@ import torch
 
 from tqdm import tqdm 
 from dataloader import fetch_entire_dataloader
-from acgan.generator import _netG
-from acgan.discriminator import _netD
+from acgan.generator import _netG, Generator_Advanced_224_Basic, Generator_Advanced_224
+from acgan.discriminator import _netD, _netD_224, Discriminator_Advanced_224_Basic, Discriminator_Advanced_224
 
+## use a 224 generator and discriminator
 cuda = True if torch.cuda.is_available() else False
 
 def weights_init_normal(m):
@@ -51,9 +52,9 @@ ndf = int(64)
 num_classes = int(2)
 nc = 3
 
-netG = _netG(ngpu, nz)
+netG = Generator_Advanced_224(ngpu, nz)
 netG.apply(weights_init_normal)
-netD = _netD(ngpu, num_classes)
+netD = Discriminator_Advanced_224(ngpu, num_classes)
 netD.apply(weights_init_normal)
 
 
@@ -61,8 +62,8 @@ netD.apply(weights_init_normal)
 dis_criterion = nn.BCELoss()
 aux_criterion = nn.NLLLoss()
 
-
-inputs = torch.FloatTensor(32, 3, 128, 128)
+#change to 224
+inputs = torch.FloatTensor(32, 1, 224, 224)
 noise = torch.FloatTensor(32, nz, 1, 1)
 eval_noise = torch.FloatTensor(32, nz, 1, 1).normal_(0, 1)
 dis_label = torch.FloatTensor(32)
@@ -183,14 +184,14 @@ for epoch in range(100):
 
     if epoch % 10 == 0:
         print(f"Epoch: {epoch}, Batch: {i}, D loss: {avg_loss_D}, G loss: {avg_loss_G }")
-        torch.save(netG.state_dict(), f"./acgan/experiment_one/generator_ckpt_{epoch}.pt")
-        torch.save(netD.state_dict(), f"./acgan/experiment_one/discriminator_ckpt_{epoch}.pt")
+        torch.save(netG.state_dict(), f"./acgan/224_basic/generator_ckpt_{epoch}.pt")
+        torch.save(netD.state_dict(), f"./acgan/224_basic/discriminator_ckpt_{epoch}.pt")
 
         print(fake.shape)
 
         grid_img = torchvision.utils.make_grid(fake, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./acgan/experiment_one/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./acgan/224_basic/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(netG.state_dict(), f"./acgan/experiment_one/generator_ckpt_{epoch}.pt")
-torch.save(netD.state_dict(), f"./acgan/experiment_one/discriminator_ckpt_{epoch}.pt")
+torch.save(netG.state_dict(), f"./acgan/224_basic/generator_ckpt_{epoch}.pt")
+torch.save(netD.state_dict(), f"./acgan/224_basic/discriminator_ckpt_{epoch}.pt")
 
