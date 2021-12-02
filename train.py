@@ -47,6 +47,10 @@ def parse_args():
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
+    parser.add_argument("--gan_positive_model", type=str, default=None, help="Location of saved GAN model for the positive class")
+    parser.add_argument("--gan_negative_model", type=str, default=None, help="Location of saved GAN model for the negative class")
+    parser.add_argument("--gan_type", type=str, choices=['gan','wgan', 'acgan', 'cgan', None], default=None, help="GAN type to load in")
+
     args = parser.parse_args()
     return args
 
@@ -365,9 +369,9 @@ def main():
     #load in data loader
 
     if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type)
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     if args.gaze_task is not None:
         print(f"Running a gaze experiment: {args.gaze_task}")

@@ -8,9 +8,9 @@ test_set = 'chestxray8'
 ood_shift = "age"
 subclass_eval = None
 gaze_task = "cam_reg_convex"
-results_dir = f'/mnt/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}'
+results_dir = f'/mnt/data/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}'
 if ood_shift is not None:
-    results_dir = f'/mnt/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'/mnt/data/gaze_robustness_results/gaze_{gaze_task}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
