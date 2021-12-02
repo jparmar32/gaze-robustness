@@ -15,19 +15,19 @@ class _netG(nn.Module):
         # Transposed Convolution 2 1,1
         self.tconv2 = nn.Sequential(
             nn.ConvTranspose2d(768, 384, 5, 2, 0, bias=False),
-            nn.BatchNorm2d(384),
+            #nn.BatchNorm2d(384),
             nn.LeakyReLU(0.1, inplace=True),
         )
         # Transposed Convolution 3 5,5
         self.tconv3 = nn.Sequential(
             nn.ConvTranspose2d(384, 256, 5, 2, 0, bias=False),
-            nn.BatchNorm2d(256),
+            #nn.BatchNorm2d(256),
             nn.LeakyReLU(0.1, inplace=True),
         )
         # Transposed Convolution 4 13,13
         self.tconv4 = nn.Sequential(
             nn.ConvTranspose2d(256, 192, 5, 2, 0, bias=False),
-            nn.BatchNorm2d(192),
+            #nn.BatchNorm2d(192),
             nn.LeakyReLU(0.1, inplace=True),
         )
         # Transposed Convolution 5 29,29
@@ -173,7 +173,7 @@ class Generator_Advanced_224(nn.Module):
                                stride=1,
                                padding=0,
                                bias=False),
-            nn.BatchNorm2d(num_features=1024),
+            #nn.BatchNorm2d(num_features=1024),
             nn.ReLU(),
             
             # Hidden Layer 2
@@ -183,7 +183,7 @@ class Generator_Advanced_224(nn.Module):
                                stride=2,
                                padding=1,
                                bias=False),
-            nn.BatchNorm2d(num_features=512),
+            #nn.BatchNorm2d(num_features=512),
             nn.ReLU(),
             
             # Hidden Layer 3
@@ -193,7 +193,7 @@ class Generator_Advanced_224(nn.Module):
                                stride=2,
                                padding=1,
                                bias=False),
-                               nn.BatchNorm2d(num_features=256),
+                               #nn.BatchNorm2d(num_features=256),
             nn.ReLU(),
             
             # Hidden Layer 4

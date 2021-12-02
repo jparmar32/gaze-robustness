@@ -1,9 +1,8 @@
 #!/bin/sh
 train="cxr_p"
-#test="chestxray8"
-test="cxr_p"
+test="mimic_cxr"
 
-for seed in 0 1 2 3 4 5 6 7 8 9
+for seed in 8 #0 1 2 3 4 5 6 7 8 9
 do
 
     python ./train.py \
@@ -15,15 +14,16 @@ do
         --batch_size 8 \
         --train_set $train \
         --test_set $test \
-        --save_dir "/mnt/data/gaze_robustness_results/gan_generation" \
-        --checkpoint_dir "/mnt/data/gaze_robustness_results/gan_generation/train_set_$train/seed_$seed/model.pt" \
-        --gan_positive_model "" \
-        --gan_negative_model "" \
-        --gan_type "" \
-        #--ood_shift "age" \
+        --save_dir "/mnt/data/gaze_robustness_results/acgan_generation" \
+        --checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
+        --ood_shift "hospital" \
+        #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+        #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+        #--gan_type "gan" \
         #--cam_weight 0.5 \
         #--cam_convex_alpha 0.5 \
         #--subclass_eval \
+        #--save_model
         
         
 done

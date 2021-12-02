@@ -275,9 +275,10 @@ def fetch_dataloaders(
 
 
                 elif gan_type == "acgan":
-                    pos_generator = acgan_generator.Generator_Advanced_224().cuda()
-                    neg_generator = acgan_generator.Generator_Advanced_224().cuda()
                     noise_size = 110
+                    pos_generator = acgan_generator.Generator_Advanced_224(1, noise_size).cuda()
+                    neg_generator = acgan_generator.Generator_Advanced_224(1, noise_size).cuda()
+                    
 
                     pos_generator.load_state_dict(torch.load(gan_positive + '/generator_best_ckpt.pt'))
                     neg_generator.load_state_dict(torch.load(gan_negative + '/generator_best_ckpt.pt'))
@@ -288,22 +289,22 @@ def fetch_dataloaders(
                     # Feed noise into the generator to create new images
                     neg_images = []
                     for i in range(class_amounts[0]):
-                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach())
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach().cpu())
                     neg_images = torch.cat(neg_images)
 
                     pos_images = []
                     for i in range(class_amounts[1]):
-                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach())
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach().cpu())
                     pos_images = torch.cat(pos_images)
 
                     #neg_images = neg_generator(neg_noise).detach()
                     #pos_images = pos_generator(pos_noise).detach()
 
-                    neg_labels = torch.zeros(neg_images.shape[0])
-                    pos_labels = torch.ones(pos_images.shape[0])
+                    neg_labels = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_labels = torch.ones(pos_images.shape[0]).cpu().numpy()
 
-                    neg_gaze_attr = torch.zeros(neg_images.shape[0])
-                    pos_gaze_attr = torch.zeros(neg_images.shape[0])
+                    neg_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
 
                     positive_fake_data = GanDataset(images=pos_images, labels=pos_labels, gaze_attr=pos_gaze_attr)
                     negative_fake_data = GanDataset(images=neg_images, labels=neg_labels, gaze_attr=neg_gaze_attr)

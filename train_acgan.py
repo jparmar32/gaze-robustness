@@ -40,7 +40,7 @@ def compute_acc(preds, labels):
 
 
 # Configure data loader
-dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex", gan = True)
+dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan = True, label_class=0)
 
 
 
@@ -184,14 +184,14 @@ for epoch in range(100):
 
     if epoch % 10 == 0:
         print(f"Epoch: {epoch}, Batch: {i}, D loss: {avg_loss_D}, G loss: {avg_loss_G }")
-        torch.save(netG.state_dict(), f"./acgan/224_basic/generator_ckpt_{epoch}.pt")
-        torch.save(netD.state_dict(), f"./acgan/224_basic/discriminator_ckpt_{epoch}.pt")
+        torch.save(netG.state_dict(), f"./acgan/negative_no_batch/generator_ckpt_{epoch}.pt")
+        torch.save(netD.state_dict(), f"./acgan/negative_no_batch/discriminator_ckpt_{epoch}.pt")
 
         print(fake.shape)
 
         grid_img = torchvision.utils.make_grid(fake, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./acgan/224_basic/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./acgan/negative_no_batch/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(netG.state_dict(), f"./acgan/224_basic/generator_ckpt_{epoch}.pt")
-torch.save(netD.state_dict(), f"./acgan/224_basic/discriminator_ckpt_{epoch}.pt")
+torch.save(netG.state_dict(), f"./acgan/negative_no_batch/generator_ckpt_{epoch}.pt")
+torch.save(netD.state_dict(), f"./acgan/negative_no_batch/discriminator_ckpt_{epoch}.pt")
 

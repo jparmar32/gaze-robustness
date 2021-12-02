@@ -26,8 +26,8 @@ cuda = True if torch.cuda.is_available() else False
 adversarial_loss = torch.nn.BCELoss()
 
 # Initialize generator and discriminator
-generator = Generator_Advanced_224_Basic()
-discriminator = Discriminator_Advanced_224_Basic()
+generator = Generator_Advanced_224()
+discriminator = Discriminator_Advanced_224()
 
 if cuda:
     generator.cuda()
@@ -40,7 +40,7 @@ optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5
 
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
 
-dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex", gan = True)
+dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan = True, label_class=0)
 
 # ----------
 #  Training
@@ -93,13 +93,13 @@ for epoch in range(100):
 
     if epoch % 10 == 0:
         print(f"Epoch: {epoch}, Batch: {i}, D loss: {d_loss.item()}, G loss: {g_loss.item()}")
-        torch.save(generator.state_dict(), f"./gan/224_basic/generator_ckpt_{epoch}.pt")
-        torch.save(discriminator.state_dict(), f"./gan/224_basic/discriminator_ckpt_{epoch}.pt")
+        torch.save(generator.state_dict(), f"./gan/negative_no_batch/generator_ckpt_{epoch}.pt")
+        torch.save(discriminator.state_dict(), f"./gan/negative_no_batch/discriminator_ckpt_{epoch}.pt")
 
         print(gen_imgs.shape)
 
         grid_img = torchvision.utils.make_grid(gen_imgs, nrow=11)
-        torchvision.utils.save_image(grid_img, f'./gan/224_basic/generated_images_ckpt_{epoch}_cxr.png')
+        torchvision.utils.save_image(grid_img, f'./gan/negative_no_batch/generated_images_ckpt_{epoch}_cxr.png')
 
-torch.save(generator.state_dict(), f"./gan/224_basic/generator_ckpt_{epoch}.pt")
-torch.save(discriminator.state_dict(), f"./gan/224_basic/discriminator_ckpt_{epoch}.pt")
+torch.save(generator.state_dict(), f"./gan/negative_no_batch/generator_ckpt_{epoch}.pt")
+torch.save(discriminator.state_dict(), f"./gan/negative_no_batch/discriminator_ckpt_{epoch}.pt")
