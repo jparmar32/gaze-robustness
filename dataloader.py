@@ -154,6 +154,9 @@ class RoboGazeDataset(Dataset):
 
                 return img, label, gaze_attribute_dict
             
+            if self.gaze_task is None:
+                return img, label, 0
+
             return img, label, gaze_attribute
 
         else:
@@ -174,7 +177,11 @@ class GanDataset(Dataset):
         return self.images.shape[0]
 
     def __getitem__(self, idx):
-        return self.images[idx], self.labels[idx], self.gaze_attr[idx]
+        img = self.images[idx]
+        if img.shape[0] == 1:
+                img = torch.cat([img, img, img])
+
+        return img, int(self.labels[idx]), int(self.gaze_attr[idx])
 
 
 def fetch_dataloaders(
@@ -245,22 +252,23 @@ def fetch_dataloaders(
 
                     neg_images = []
                     for i in range(class_amounts[0]):
-                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach())
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach().cpu())
                     neg_images = torch.cat(neg_images)
 
                     pos_images = []
                     for i in range(class_amounts[1]):
-                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach())
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach().cpu())
                     pos_images = torch.cat(pos_images)
 
                     #neg_images = neg_generator(neg_noise).detach()
                     #pos_images = pos_generator(pos_noise).detach()
                  
-                    neg_labels = torch.zeros(neg_images.shape[0])
-                    pos_labels = torch.ones(pos_images.shape[0])
 
-                    neg_gaze_attr = torch.zeros(neg_images.shape[0])
-                    pos_gaze_attr = torch.zeros(neg_images.shape[0])
+                    neg_labels = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_labels = torch.ones(pos_images.shape[0]).cpu().numpy()
+
+                    neg_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
 
                     positive_fake_data = GanDataset(images=pos_images, labels=pos_labels, gaze_attr=pos_gaze_attr)
                     negative_fake_data = GanDataset(images=neg_images, labels=neg_labels, gaze_attr=neg_gaze_attr)
@@ -287,7 +295,7 @@ def fetch_dataloaders(
                     for i in range(class_amounts[1]):
                         pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach())
                     pos_images = torch.cat(pos_images)
-                    
+
                     #neg_images = neg_generator(neg_noise).detach()
                     #pos_images = pos_generator(pos_noise).detach()
 
@@ -411,6 +419,8 @@ if __name__ == "__main__":
 
     dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan_positive = "/home/jsparmar/gaze-robustness/gan/positive_class", gan_negative = "/home/jsparmar/gaze-robustness/gan/negative_class", gan_type = 'gan')
     print(len(dls['train'].dataset))
+    print(len(dls['val'].dataset))
+    print(len(dls['test'].dataset))
 
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
     #dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
