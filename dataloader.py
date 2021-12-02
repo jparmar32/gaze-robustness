@@ -242,10 +242,20 @@ def fetch_dataloaders(
                     pos_noise = torch.randn(class_amounts[1], noise_size, 1, 1).cuda()
 
                     # Feed noise into the generator to create new images
-                    neg_images = neg_generator(neg_noise).detach()
-                    pos_images = pos_generator(pos_noise).detach()
-                 
 
+                    neg_images = []
+                    for i in range(class_amounts[0]):
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach())
+                    neg_images = torch.cat(neg_images)
+
+                    pos_images = []
+                    for i in range(class_amounts[1]):
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach())
+                    pos_images = torch.cat(pos_images)
+
+                    #neg_images = neg_generator(neg_noise).detach()
+                    #pos_images = pos_generator(pos_noise).detach()
+                 
                     neg_labels = torch.zeros(neg_images.shape[0])
                     pos_labels = torch.ones(pos_images.shape[0])
 
@@ -268,8 +278,18 @@ def fetch_dataloaders(
                     pos_noise = torch.randn(class_amounts[1], noise_size, 1, 1).cuda()
 
                     # Feed noise into the generator to create new images
-                    neg_images = neg_generator(neg_noise).detach()
-                    pos_images = pos_generator(pos_noise).detach()
+                    neg_images = []
+                    for i in range(class_amounts[0]):
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach())
+                    neg_images = torch.cat(neg_images)
+
+                    pos_images = []
+                    for i in range(class_amounts[1]):
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach())
+                    pos_images = torch.cat(pos_images)
+                    
+                    #neg_images = neg_generator(neg_noise).detach()
+                    #pos_images = pos_generator(pos_noise).detach()
 
                     neg_labels = torch.zeros(neg_images.shape[0])
                     pos_labels = torch.ones(pos_images.shape[0])
@@ -389,7 +409,7 @@ def fetch_entire_dataloader(source,
 
 if __name__ == "__main__":
 
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan_positive = "/home/jsparmar/gaze-robustness/gan/experiment_one", gan_negative = "/home/jsparmar/gaze-robustness/gan/experiment_one", gan_type = 'gan')
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan_positive = "/home/jsparmar/gaze-robustness/gan/positive_class", gan_negative = "/home/jsparmar/gaze-robustness/gan/negative_class", gan_type = 'gan')
     print(len(dls['train'].dataset))
 
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
