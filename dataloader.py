@@ -7,8 +7,12 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import transforms
 from PIL import Image
 import pydicom
+import torchvision
 
 from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels
+
+import gan.generator as gan_generator
+import acgan.generator as acgan_generator
 
 
 class RoboGazeDataset(Dataset):
@@ -27,7 +31,8 @@ class RoboGazeDataset(Dataset):
         gaze_task = None,
         val_scale=0.2,
         seed=0,
-        subclass=False
+        subclass=False,
+        gan = False
     ):
 
         """
@@ -43,6 +48,7 @@ class RoboGazeDataset(Dataset):
         if self.source not in ['cxr_a', 'cxr_p']:
             self.ood = True
 
+        self.gan = gan
         self.data_dir = data_dir
         self.split_type = split_type
         self.transform = transform
@@ -112,11 +118,16 @@ class RoboGazeDataset(Dataset):
    
         img = self.transform(img)
         
-        if img.shape[0] == 1:
-            img = torch.cat([img, img, img])
+        if not self.gan:
+            if img.shape[0] == 1:
+                img = torch.cat([img, img, img])
 
         if img.shape[0] >= 4:
             img = img[:3] 
+
+        if self.gan:
+            return img, label
+
 
         if self.split_type in ['train', 'val']:
             
@@ -143,11 +154,34 @@ class RoboGazeDataset(Dataset):
 
                 return img, label, gaze_attribute_dict
             
+            if self.gaze_task is None:
+                return img, label, 0
+
             return img, label, gaze_attribute
 
         else:
             return img, label, subclass_label
 
+class GanDataset(Dataset):
+    def __init__(
+        self,
+        images,
+        labels,
+        gaze_attr):
+
+        self.images = images
+        self.labels = labels
+        self.gaze_attr = gaze_attr
+
+    def __len__(self):
+        return self.images.shape[0]
+
+    def __getitem__(self, idx):
+        img = self.images[idx]
+        if img.shape[0] == 1:
+                img = torch.cat([img, img, img])
+
+        return img, int(self.labels[idx]), int(self.gaze_attr[idx])
 
 
 def fetch_dataloaders(
@@ -160,13 +194,177 @@ def fetch_dataloaders(
     gaze_task = None, #either none, data augment, cam reg, cam reg convex
     ood_set = None,
     ood_shift = None,
-    subclass = False
+    subclass = False,
+    gan_positive = None,
+    gan_negative = None,
+    gan_type = None
 ):
 
     
     transforms = get_data_transforms("cxr", normalization_type="train_images")
     dataloaders = {}
 
+    for split in ["train", "val", "test"]:
+
+        if ood_set is not None:
+            if split == "test":
+                source = f"{ood_set}/{source}/{ood_shift}"
+
+        if split == 'train':
+            if gan_positive is not None:
+                original_dataset = RoboGazeDataset(
+                source=source,
+                data_dir=data_dir,
+                split_type=split,
+                gaze_task = gaze_task,
+                transform=transforms[split],
+                val_scale=val_scale,
+                seed=seed,
+                subclass=subclass)
+
+
+                ## get positive and negative class amounts
+                original_dataloader = DataLoader(
+                    dataset=original_dataset,
+                    shuffle=False,
+                    batch_size=1,
+                    num_workers=num_workers,
+                )
+
+                class_amounts = [0,0]
+                for img, label, _ in original_dataloader:
+                    class_amounts[label.item()] += 1
+
+
+                if gan_type == "gan":
+                    pos_generator = gan_generator.Generator_Advanced_224().cuda()
+                    neg_generator = gan_generator.Generator_Advanced_224().cuda()
+                    noise_size = 100
+
+                    pos_generator.load_state_dict(torch.load(gan_positive + '/generator_best_ckpt.pt'))
+                    neg_generator.load_state_dict(torch.load(gan_negative + '/generator_best_ckpt.pt'))
+
+
+                    neg_noise = torch.randn(class_amounts[0], noise_size, 1, 1).cuda()
+                    pos_noise = torch.randn(class_amounts[1], noise_size, 1, 1).cuda()
+
+                    # Feed noise into the generator to create new images
+
+                    neg_images = []
+                    for i in range(class_amounts[0]):
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach().cpu())
+                    neg_images = torch.cat(neg_images)
+
+                    pos_images = []
+                    for i in range(class_amounts[1]):
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach().cpu())
+                    pos_images = torch.cat(pos_images)
+
+                    #neg_images = neg_generator(neg_noise).detach()
+                    #pos_images = pos_generator(pos_noise).detach()
+                 
+
+                    neg_labels = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_labels = torch.ones(pos_images.shape[0]).cpu().numpy()
+
+                    neg_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+
+                    positive_fake_data = GanDataset(images=pos_images, labels=pos_labels, gaze_attr=pos_gaze_attr)
+                    negative_fake_data = GanDataset(images=neg_images, labels=neg_labels, gaze_attr=neg_gaze_attr)
+
+
+                elif gan_type == "acgan":
+                    noise_size = 110
+                    pos_generator = acgan_generator.Generator_Advanced_224(1, noise_size).cuda()
+                    neg_generator = acgan_generator.Generator_Advanced_224(1, noise_size).cuda()
+                    
+
+                    pos_generator.load_state_dict(torch.load(gan_positive + '/generator_best_ckpt.pt'))
+                    neg_generator.load_state_dict(torch.load(gan_negative + '/generator_best_ckpt.pt'))
+
+                    neg_noise = torch.randn(class_amounts[0], noise_size, 1, 1).cuda()
+                    pos_noise = torch.randn(class_amounts[1], noise_size, 1, 1).cuda()
+
+                    # Feed noise into the generator to create new images
+                    neg_images = []
+                    for i in range(class_amounts[0]):
+                        neg_images.append(neg_generator(neg_noise[i].unsqueeze(dim=0)).detach().cpu())
+                    neg_images = torch.cat(neg_images)
+
+                    pos_images = []
+                    for i in range(class_amounts[1]):
+                        pos_images.append(pos_generator(pos_noise[i].unsqueeze(dim=0)).detach().cpu())
+                    pos_images = torch.cat(pos_images)
+
+                    #neg_images = neg_generator(neg_noise).detach()
+                    #pos_images = pos_generator(pos_noise).detach()
+
+                    neg_labels = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_labels = torch.ones(pos_images.shape[0]).cpu().numpy()
+
+                    neg_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+                    pos_gaze_attr = torch.zeros(neg_images.shape[0]).cpu().numpy()
+
+                    positive_fake_data = GanDataset(images=pos_images, labels=pos_labels, gaze_attr=pos_gaze_attr)
+                    negative_fake_data = GanDataset(images=neg_images, labels=neg_labels, gaze_attr=neg_gaze_attr)
+
+                elif gan_type == "wgan":
+                    pass #TODO: varun to implement
+                elif gan_type == "cgan":
+                    pass #TODO: varun to implement
+
+                dataset = torch.utils.data.ConcatDataset([original_dataset, positive_fake_data, negative_fake_data])
+
+            else:
+                dataset = RoboGazeDataset(
+                source=source,
+                data_dir=data_dir,
+                split_type=split,
+                gaze_task = gaze_task,
+                transform=transforms[split],
+                val_scale=val_scale,
+                seed=seed,
+                subclass=subclass)
+        else:
+            dataset = RoboGazeDataset(
+                source=source,
+                data_dir=data_dir,
+                split_type=split,
+                gaze_task = gaze_task,
+                transform=transforms[split],
+                val_scale=val_scale,
+                seed=seed,
+                subclass=subclass
+            )
+
+        dataloaders[split] = (
+            DataLoader(
+                dataset=dataset,
+                shuffle=split == "train",
+                batch_size=batch_size,
+                num_workers=num_workers,
+            )
+        )
+
+    return dataloaders
+
+def fetch_entire_dataloader(source,
+    data_dir,
+    val_scale,
+    seed,
+    batch_size,
+    num_workers,
+    gaze_task = None, #either none, data augment, cam reg, cam reg convex
+    ood_set = None,
+    ood_shift = None,
+    subclass = False,
+    gan = True,
+    label_class = None):
+
+    transforms = get_data_transforms("cxr", normalization_type="train_images", gan = gan)
+
+    datasets = []
     for split in ["train", "val", "test"]:
 
         if ood_set is not None:
@@ -181,36 +379,76 @@ def fetch_dataloaders(
             transform=transforms[split],
             val_scale=val_scale,
             seed=seed,
-            subclass=subclass
+            subclass=subclass,
+            gan=gan
         )
 
-        dataloaders[split] = (
-            DataLoader(
-                dataset=dataset,
-                shuffle=split == "train",
-                batch_size=batch_size,
-                num_workers=num_workers,
-            )
-        )
+        datasets.append(dataset)
 
-    return dataloaders
 
+    concat_datasets = torch.utils.data.ConcatDataset(datasets)
+
+    if label_class is not None:
+        full_dataloader = DataLoader(
+                    dataset=concat_datasets,
+                    shuffle=False,
+                    batch_size=1,
+                    num_workers=num_workers,
+                )
+        class_indices = []
+        for idx, (img, label) in enumerate(full_dataloader):
+            if label.item() == label_class:
+                class_indices.append(idx)
+    
+        class_dataset = torch.utils.data.Subset(concat_datasets, class_indices)
+
+        return DataLoader(
+                    dataset=class_dataset,
+                    shuffle=True,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                )
+    else:
+        return DataLoader(
+                    dataset=concat_datasets,
+                    shuffle=True,
+                    batch_size=batch_size,
+                    num_workers=num_workers,
+                )
 
 if __name__ == "__main__":
-    
+
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan_positive = "/home/jsparmar/gaze-robustness/gan/positive_class", gan_negative = "/home/jsparmar/gaze-robustness/gan/negative_class", gan_type = 'gan')
+    print(len(dls['train'].dataset))
+    print(len(dls['val'].dataset))
+    print(len(dls['test'].dataset))
+
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='chexpert', ood_shift='hospital')
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
+    #dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="cam_reg_convex")
+    #dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan = True, label_class=1)
+    #print(len(dl.dataset))
+    #dataiter = iter(dl)
+    #for i in range(1):
+        #images, labels= dataiter.next()
+        #print(images.shape)
+        #grid_img = torchvision.utils.make_grid(images, nrow=8)
+        #torchvision.utils.save_image(grid_img, 'downsampled_cxr.png')
 
-    '''dataiter = iter(dls['val'])
+    #dataiter = iter(dls['val'])
 
-    for i in range(1):
-        images, labels, gaze = dataiter.next()
+    #for i in range(1):
+        #images, labels, gaze = dataiter.next()
+        #print(len(dls['val'].dataset))
+        #print(images[0, 0:10, 0:10])
+        #print(images[1, 0:10, 0:10])
     
 
         #print(subclass_label)
     # for (img,label) in dls[0]:
     #     pdb.set_trace()'''
 
+
+## dataloader for gan, downsample and 1 
 
 
 

@@ -80,7 +80,7 @@ norm_stats = {
 }
 
 
-def get_data_transforms(dataset_name, normalization_type="none"):
+def get_data_transforms(dataset_name, normalization_type="none", gan = False):
     """Get data transforms based on dataset name"""
     num_channels = 1
 
@@ -98,9 +98,12 @@ def get_data_transforms(dataset_name, normalization_type="none"):
     else:
         raise ValueError(f"Unknown normalization type {normalization_type}")
 
+
+    resize_val = 224 if gan else 224
+
     eval_transform = transforms.Compose(
         [
-            transforms.Resize([224, 224]),
+            transforms.Resize([resize_val, resize_val]),
             transforms.ToTensor(),
             transforms.Normalize(mean, std),
         ]
