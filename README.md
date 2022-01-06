@@ -157,3 +157,41 @@ dann_run(src_name=”cxr_p", tgt_name=”chexpert_hospital", ood_set=”chexpert
 ```
 
 One can then train and evlauate the model by calling `python experiments/dann_gaze.py` from the command line. 
+
+
+### GAN Data Augmentation 
+
+To run a model such that the dataset is augmented by GAN images, run:
+
+```
+train="cxr_p"
+test="mimic_cxr"
+
+for seed in 8 #0 1 2 3 4 5 6 7 8 9
+do
+
+    python ./train.py \
+        --epochs 15 \
+        --min_lr 0 \
+        --lr .0001 \
+        --wd .01 \
+        --seed $seed \
+        --batch_size 8 \
+        --train_set $train \
+        --test_set $test \
+        --save_dir "/mnt/data/gaze_robustness_results/acgan_generation" \
+        --checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
+        --ood_shift "hospital" \
+        --gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+        --gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+        --gan_type "gan" \
+```
+
+This requires that a GAN generator be trained before hand which is done by running: 
+
+```
+python gan_training/train_gan.py
+```
+
+
+
