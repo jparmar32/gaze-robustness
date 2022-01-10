@@ -15,11 +15,11 @@ do
         --train_set $train \
         --test_set $test \
         --save_dir "/mnt/data/gaze_robustness_results/acgan_generation" \
-        --checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
-        --ood_shift "hospital" \
-        #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
-        #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
-        #--gan_type "gan" \
+        --gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+        --gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+        --gan_type "gan" \
+        #--ood_shift "hospital" \
+        #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
         #--cam_weight 0.5 \
         #--cam_convex_alpha 0.5 \
         #--subclass_eval \

@@ -11,8 +11,8 @@ import torchvision
 
 from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels
 
-import gan.generator as gan_generator
-import acgan.generator as acgan_generator
+import gan_training.gan.generator as gan_generator
+import gan_training.acgan.generator as acgan_generator
 
 
 class RoboGazeDataset(Dataset):
@@ -235,7 +235,6 @@ def fetch_dataloaders(
                 for img, label, _ in original_dataloader:
                     class_amounts[label.item()] += 1
 
-
                 if gan_type == "gan":
                     pos_generator = gan_generator.Generator_Advanced_224().cuda()
                     neg_generator = gan_generator.Generator_Advanced_224().cuda()
@@ -308,11 +307,6 @@ def fetch_dataloaders(
 
                     positive_fake_data = GanDataset(images=pos_images, labels=pos_labels, gaze_attr=pos_gaze_attr)
                     negative_fake_data = GanDataset(images=neg_images, labels=neg_labels, gaze_attr=neg_gaze_attr)
-
-                elif gan_type == "wgan":
-                    pass #TODO: varun to implement
-                elif gan_type == "cgan":
-                    pass #TODO: varun to implement
 
                 dataset = torch.utils.data.ConcatDataset([original_dataset, positive_fake_data, negative_fake_data])
 
