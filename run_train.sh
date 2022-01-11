@@ -1,8 +1,8 @@
 #!/bin/sh
 train="cxr_p"
-test="mimic_cxr"
+test="cxr_p"
 
-for seed in 8 #0 1 2 3 4 5 6 7 8 9
+for seed in 0 1 2 3 4 5 6 7 8 9
 do
 
     python ./train.py \
@@ -14,10 +14,13 @@ do
         --batch_size 8 \
         --train_set $train \
         --test_set $test \
-        --save_dir "/mnt/data/gaze_robustness_results/acgan_generation" \
-        --gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
-        --gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
-        --gan_type "gan" \
+        --save_dir "/mnt/data/gaze_robustness_results/segmentation_reg" \
+        --cam_weight 0.5 \
+        --gaze_task "segmentation_reg"
+        --save_model
+        #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+        #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+        #--gan_type "gan" \
         #--ood_shift "hospital" \
         #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
         #--cam_weight 0.5 \

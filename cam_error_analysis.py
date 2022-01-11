@@ -139,7 +139,7 @@ def main():
                 output_probs = F.softmax(logits.data, dim=1)
                 output_label = torch.argmax(output_probs).item()
                 features = cnn_only(inputs).squeeze().cpu().detach().numpy()
-
+   
                 if y_true:
 
                     # calculate cam
@@ -149,6 +149,7 @@ def main():
                     segmask = np.zeros(inputs.shape[2:4])
                     segmask_org = rle2mask(rle, 1024, 1024).T
                     segmask = resize(segmask_org, inputs.shape[2:4])
+                    print(segmask.shape)
 
                     cam = resize(cam, inputs.shape[2:4], order=0)
                     cam_org = resize(cam, segmask_org.shape)

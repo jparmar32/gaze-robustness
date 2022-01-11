@@ -8,8 +8,10 @@ from torchvision.transforms import transforms
 from PIL import Image
 import pydicom
 import torchvision
+from skimage.transform import resize
+import math
 
-from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask
 
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
@@ -73,6 +75,10 @@ class RoboGazeDataset(Dataset):
             self.gaze_features = gaze_attribute_labels_dict
 
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
+
+            seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
+            with open(seg_dict_pth, "rb") as pkl_f:
+                self.rle_dict = pickle.load(pkl_f)
 
     def __len__(self):
         return len(self.file_markers)
@@ -153,6 +159,24 @@ class RoboGazeDataset(Dataset):
                 gaze_attribute_dict = {"gaze_attribute": gaze_attribute, "average_hm":self.average_heatmap}
 
                 return img, label, gaze_attribute_dict
+
+            if self.gaze_task == "segmentation_reg":
+            
+                rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
+             
+                y_true = rle != " -1"
+
+                if y_true:
+
+                    # extract segmask
+                    segmask_org = rle2mask(rle, 1024, 1024).T
+                    segmask = resize(segmask_org, (7,7))
+                    segmask = torch.FloatTensor(segmask)
+                    return img, label, segmask
+
+                else:
+                    segmask = -1*torch.ones((7,7))
+                    return img, label, segmask
             
             if self.gaze_task is None:
                 return img, label, 0
@@ -416,7 +440,7 @@ def fetch_entire_dataloader(source,
 
 if __name__ == "__main__":
 
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan_positive = "/home/jsparmar/gaze-robustness/gan/positive_class", gan_negative = "/home/jsparmar/gaze-robustness/gan/negative_class", gan_type = 'gan')
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="segmentation_reg")
     print(len(dls['train'].dataset))
     print(len(dls['val'].dataset))
     print(len(dls['test'].dataset))
@@ -432,11 +456,12 @@ if __name__ == "__main__":
         #grid_img = torchvision.utils.make_grid(images, nrow=8)
         #torchvision.utils.save_image(grid_img, 'downsampled_cxr.png')
 
-    #dataiter = iter(dls['val'])
+    dataiter = iter(dls['train'])
 
-    #for i in range(1):
-        #images, labels, gaze = dataiter.next()
-        #print(len(dls['val'].dataset))
+    for i in range(1):
+        images, labels, gaze = dataiter.next()
+        print(len(dls['val'].dataset))
+        print(gaze.shape)
         #print(images[0, 0:10, 0:10])
         #print(images[1, 0:10, 0:10])
     
