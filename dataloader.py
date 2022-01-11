@@ -160,6 +160,10 @@ class RoboGazeDataset(Dataset):
             return img, label, gaze_attribute
 
         else:
+
+            if self.gaze_task == 'cam_error_analysis':
+                return img, label, img_id
+            
             return img, label, subclass_label
 
 class GanDataset(Dataset):
