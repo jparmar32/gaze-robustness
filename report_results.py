@@ -4,16 +4,17 @@ import os
 
 
 train_set = 'cxr_p'
-test_set = 'mimic_cxr'
-ood_shift = "hospital"
+test_set = 'cxr_p'
+ood_shift = None
 subclass_eval = None
-gaze_task = "cam_reg_convex"
-results_dir = f'/mnt/data/gaze_robustness_results/acgan_generation/train_set_{train_set}/test_set_{test_set}'
+gaze_task = "segmentation_reg"
+results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/cw_0.01/train_set_{train_set}/test_set_{test_set}'
 if ood_shift is not None:
-    results_dir = f'/mnt/data/gaze_robustness_results/acgan_generation/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/cw_1/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
+
 
 #results_dir = f'/mnt/gaze_robustness_results'
 
