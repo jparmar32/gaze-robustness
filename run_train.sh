@@ -1,31 +1,40 @@
 #!/bin/sh
 train="cxr_p"
-test="mimic_cxr"
+test="chexpert"
 
-for seed in 8 #0 1 2 3 4 5 6 7 8 9
-do
+for cw in 0.01 0.1 1
+do  
+    for seed in 0 1 2 3 4 5 6 7 8 9
+    do
 
-    python ./train.py \
-        --epochs 15 \
-        --min_lr 0 \
-        --lr .0001 \
-        --wd .01 \
-        --seed $seed \
-        --batch_size 8 \
-        --train_set $train \
-        --test_set $test \
-        --save_dir "/mnt/data/gaze_robustness_results/acgan_generation" \
-        --gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
-        --gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
-        --gan_type "gan" \
-        #--ood_shift "hospital" \
-        #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
-        #--cam_weight 0.5 \
-        #--cam_convex_alpha 0.5 \
-        #--subclass_eval \
-        #--save_model
-        
-        
+        python ./train.py \
+            --epochs 15 \
+            --min_lr 0 \
+            --lr .0001 \
+            --wd .1 \
+            --seed $seed \
+            --batch_size 8 \
+            --train_set $train \
+            --test_set $test \
+            --save_dir "/mnt/data/gaze_robustness_results/segmentation_reg/cw_$cw" \
+            --cam_weight $cw \
+            --checkpoint_dir "/mnt/data/gaze_robustness_results/segmentation_reg/cw_$cw/train_set_$train/seed_$seed/model.pt" \
+            --ood_shift "hospital" \
+            --gaze_task "segmentation_reg"
+            #--save_model \
+            #--ood_shift "hospital" \
+            #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+            #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+            #--gan_type "gan" \
+            #--ood_shift "hospital" \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
+            #--cam_weight 0.5 \
+            #--cam_convex_alpha 0.5 \
+            #--subclass_eval \
+            #--save_model
+            
+            
+    done
 done
 
 #hyperparaam search

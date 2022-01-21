@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', None], default=None, help="Type of gaze enhanced expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', None], default=None, help="Type of gaze enhanced expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
@@ -250,22 +250,25 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 else:
                     eye_hm = gaze_attributes[i,...]
 
-
-                
-
-
                 if len(eye_hm.shape) != 2:
                     eye_hm = eye_hm.reshape(int(math.sqrt(eye_hm.shape[0])),int(math.sqrt(eye_hm.shape[0])))
 
                 if eye_hm.shape != cam.shape:
                     pool_dim = int(eye_hm.shape[0] / cam.shape[0])
                     eye_hm = nn.functional.avg_pool2d(eye_hm.unsqueeze(0).unsqueeze(0), pool_dim).squeeze()
+                    
                 eye_hm_norm = eye_hm / eye_hm.sum()
                 cam_normalized = cam / cam.sum()
                 eye_hm_norm = eye_hm_norm.to(device="cuda:0")
                 cam_normalized = cam_normalized.to(device="cuda:0")
-                if not (torch.isnan(cam_normalized).any() or torch.isnan(eye_hm_norm).any()):
-                    cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
+
+                if gaze_task == "segmentation_reg":
+                    if not torch.equal(eye_hm,-1*torch.ones((7,7))):
+                        if not (torch.isnan(cam_normalized).any() or torch.isnan(eye_hm_norm).any()):
+                            cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
+                else:
+                    if not (torch.isnan(cam_normalized).any() or torch.isnan(eye_hm_norm).any()):
+                        cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
             a_loss = cum_losses.sum()
 
 
