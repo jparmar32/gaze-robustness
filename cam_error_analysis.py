@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
-    parser.add_argument("--gaze_task", type=str, choices=['cam_error_analysis', None], default=None, help="Type of gaze to analyze error of")
+    parser.add_argument("--gaze_task", type=str, choices=['cam_error_analysis', None], default='cam_error_analysis', help="Type of gaze to analyze error of")
 
     parser.add_argument("--correlation_type", type=str, choices=['loss','class', None], default=None, help="Decide how to compute correlation between CAM score and model quality")
 
@@ -128,7 +128,7 @@ def main():
             
             with torch.no_grad():
                 inputs, targets, img_id = batch
-                
+                #print(img_id)
                 rle = rle_dict[img_id[0].split("/")[-1].split(".dcm")[0]]
                 y_true = rle != " -1"
 
@@ -149,10 +149,11 @@ def main():
                     segmask = np.zeros(inputs.shape[2:4])
                     segmask_org = rle2mask(rle, 1024, 1024).T
                     segmask = resize(segmask_org, inputs.shape[2:4])
-                    print(segmask.shape)
 
                     cam = resize(cam, inputs.shape[2:4], order=0)
+                    
                     cam_org = resize(cam, segmask_org.shape)
+                    
 
 
                     # Dice score
