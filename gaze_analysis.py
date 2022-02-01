@@ -1,5 +1,6 @@
 
 from cgitb import small
+from sys import int_info
 import numpy as np
 import torch
 import pickle 
@@ -11,6 +12,7 @@ import json
 import matplotlib.pyplot as plt
 from skimage.transform import resize
 from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, load_gaze_data
+from collections import defaultdict
 
 def compute_heatmap_iou(mask_1, mask_2):
     area_overlap = np.sum(np.logical_and(mask_1, mask_2))
@@ -22,12 +24,12 @@ def compute_intersection_over_seg(gaze_mask, seg_mask):
     area_overlap = np.sum(np.logical_and(gaze_mask, seg_mask))
     return (area_overlap/np.sum(seg_mask))
 
-def gaze_heatmap_segmentation_mask(gaze_maps, segmentation_masks, threshold, inverse_segmentation = False ,iou = True):
+def gaze_heatmap_segmentation_mask(gaze_maps, segmentation_masks, threshold, map_size, inverse_segmentation = False ,iou = True):
     
     metric = []
 
     for gaze_id, gaze_map in gaze_maps.items():
-        gaze_map = gaze_map[0].reshape(7,7)
+        gaze_map = gaze_map[0].reshape(map_size,map_size)
         img_path = gaze_id.split("/")[-1].split(".dcm")[0]
         rle_binary = segmentation_masks[img_path]
 
@@ -45,8 +47,8 @@ def gaze_heatmap_segmentation_mask(gaze_maps, segmentation_masks, threshold, inv
     return np.mean(metric)
 
 def gaze_time_spent_segmentation(gaze_seqs, segmentation_masks, map_size):
-    time = []
-    in_seg = [] # 0 is false, 1 is true 
+    time_in_seg = defaultdict(list) # 0 is false, 1 is true 
+    time_unnorm_in_seg = defaultdict(list)
 
     for gaze_id, gaze_seq in gaze_seqs.items():
         img_path = gaze_id.split("/")[-1].split(".dcm")[0]
@@ -54,22 +56,64 @@ def gaze_time_spent_segmentation(gaze_seqs, segmentation_masks, map_size):
 
         if rle_binary != " -1":
 
+            max_spent = 0
+            for gaze_info in gaze_seq:
+                x,y, spent = gaze_info
+                if spent > max_spent:
+                    max_spent = spent 
+
             for time_step, gaze_info in enumerate(gaze_seq):
                 x,y, spent = gaze_info 
                 x, y = np.clip([x, y], 0., 0.999)
 
                 row = math.floor(y*map_size)
                 col = math.floor(x*map_size)
-                time.append(spent)
-                in_seg.append(rle_binary[row][col])
+                time_in_seg[spent/max_spent].append(rle_binary[row][col])
+                time_unnorm_in_seg[spent].append(rle_binary[row][col])
+
+    time = []
+    in_seg = []
+    counts = []
+
+    for key, val in time_unnorm_in_seg.items():
+        time.append(key)
+        in_seg.append(sum(val)/len(val))
+        print(f"Time spent of {key} has a total count of {len(val)}")
+        for i in range(len(val)):
+            counts.append(key)
+                
+    time = np.array(time)
+    in_seg = np.array(in_seg)
+
+    plt.hist(counts, bins=7)
+    plt.xlabel("Time Spent")
+    plt.ylabel("Counts of Val")
+    plt.savefig("./gaze_analysis_results/time_spent_hist.png")
+    plt.close()
+
+    plt.scatter(time, in_seg)
+    plt.xlabel("Time Spent")
+    plt.ylabel("Proportion of Being In Seg Mask")
+    plt.savefig("./gaze_analysis_results/time_spent_unnorm_vs_seg.png")
+
+    plt.close()
+
+    time = []
+    in_seg = []
+
+    for key, val in time_in_seg.items():
+        time.append(key)
+        in_seg.append(sum(val)/len(val))
                 
     time = np.array(time)
     in_seg = np.array(in_seg)
 
     plt.scatter(time, in_seg)
     plt.xlabel("Time Spent")
-    plt.ylabel("In Seg Mask")
+    plt.ylabel("Proportion of Being In Seg Mask")
     plt.savefig("./gaze_analysis_results/time_spent_vs_seg.png")
+
+    plt.close()
 
     return np.corrcoef(time, in_seg)[0,1]
     
@@ -77,6 +121,7 @@ def gaze_time_spent_segmentation(gaze_seqs, segmentation_masks, map_size):
 def gaze_time_segmentation(gaze_seqs, segmentation_masks, map_size):
     time = []
     in_seg = [] # 0 is false, 1 is true 
+
 
     for gaze_id, gaze_seq in gaze_seqs.items():
         img_path = gaze_id.split("/")[-1].split(".dcm")[0]
@@ -93,14 +138,16 @@ def gaze_time_segmentation(gaze_seqs, segmentation_masks, map_size):
                 col = math.floor(x*map_size)
                 time.append(ts)
                 in_seg.append(rle_binary[row][col])
+               
                 
     time = np.array(time)
     in_seg = np.array(in_seg)
 
     plt.scatter(time, in_seg)
     plt.xlabel("Time Step")
-    plt.ylabel("In Seg Mask")
+    plt.ylabel("Proportion of Being In Seg Mask")
     plt.savefig("./gaze_analysis_results/time_vs_seg.png")
+    plt.close()
 
     return np.corrcoef(time, in_seg)[0,1]
 
@@ -155,9 +202,9 @@ def get_gaze_sequences():
 
     return train_gaze_sequences
 
-def get_gaze_heatmaps():
-    train_gaze_attribute_labels_dict = load_gaze_attribute_labels("cxr_p", "train", "heatmap2", 0)
-    val_gaze_attribute_labels_dict = load_gaze_attribute_labels("cxr_p", "val", "heatmap2", 0)
+def get_gaze_heatmaps(task):
+    train_gaze_attribute_labels_dict = load_gaze_attribute_labels("cxr_p", "train", task, 0)
+    val_gaze_attribute_labels_dict = load_gaze_attribute_labels("cxr_p", "val", task, 0)
     
     train_gaze_attribute_labels_dict.update(val_gaze_attribute_labels_dict)
 
@@ -166,14 +213,11 @@ def get_gaze_heatmaps():
 
 def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7):
 
-    gaze_heatmaps = get_gaze_heatmaps() ## 7 x 7
+    task = "heatmap2" if map_size == 7 else "heatmap3"
+    gaze_heatmaps = get_gaze_heatmaps(task) ## 7 x 7
     gaze_sequences = get_gaze_sequences() 
     segmentation_masks = get_segmentation_masks(map_size, gaze_sequences) ### map_size x map_size
 
-    #print(gaze_heatmaps[list(gaze_heatmaps.keys())[0]][0].reshape(7,7).shape)
-    #raise ValueError("test")
-
-    ## TODO: implement iter over threshold 
    
     if map_size == 7:
         ### evaluate overlap between current 7x7 heatmap and segmentation mask
@@ -183,12 +227,12 @@ def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7):
         for t in np.arange(threshold, threshold_max + interval, interval):
             metrics["threshold"].append(t)
             print(f"Using a threshold of: {t}")
-            iou_gaze_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, inverse_segmentation = False ,iou = True)
+            iou_gaze_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, map_size, inverse_segmentation = False ,iou = True)
             print(f"Avergage IoU Between Gaze Heatmap and Ground Truth Segmentation Mask: {iou_gaze_seg}")
 
             ### evaluate overlap between current 7 x 7 heatmap and not segmentation mask regions
-            iou_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, inverse_segmentation = True ,iou = True)
-            overlap_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, inverse_segmentation = True ,iou = False)
+            iou_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t,  map_size, inverse_segmentation = True ,iou = True)
+            overlap_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t,  map_size, inverse_segmentation = True ,iou = False)
             print(f"Average IoU Between Gaze Heatmap and Regions Not Contained within Ground Truth Segmentation Mask: {iou_gaze_inv_seg}")
             print(f"Average Overlap Between Gaze Heatmap and Regions Not Contained within Ground Truth Segmentation Mask: {overlap_gaze_inv_seg}")
 
@@ -203,7 +247,7 @@ def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7):
 
         ### evaluate relationship/trend between gaze points being in segmentation region or being outside segmentation region and the time spent on the patch 
         spent_corr = gaze_time_spent_segmentation(gaze_sequences, segmentation_masks, map_size)
-        print(f"Correlation between gaze time step and being in ground truth segmentation mask: {spent_corr}")
+        print(f"Correlation between gaze time spent and being in ground truth segmentation mask: {spent_corr}")
 
         metrics_df = pd.DataFrame.from_dict(metrics)
         print(metrics_df)
@@ -214,8 +258,43 @@ def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7):
 
 
     elif map_size == 224:
-        pass
-        ## TODO: size up
+        ### evaluate overlap between current 224x224 heatmap and segmentation mask
+
+        metrics = {"threshold" : [], "iou_gaze_segs" : [], "iou_gaze_inv_segs": [], "overlap_gaze_inv_segs" : []}
+
+        for t in np.arange(threshold, threshold_max + interval, interval):
+            metrics["threshold"].append(t)
+            print(f"Using a threshold of: {t}")
+            iou_gaze_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, map_size, inverse_segmentation = False ,iou = True)
+            print(f"Avergage IoU Between Gaze Heatmap and Ground Truth Segmentation Mask: {iou_gaze_seg}")
+
+            ### evaluate overlap between current 7 x 7 heatmap and not segmentation mask regions
+            iou_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t,  map_size, inverse_segmentation = True ,iou = True)
+            overlap_gaze_inv_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t,  map_size, inverse_segmentation = True ,iou = False)
+            print(f"Average IoU Between Gaze Heatmap and Regions Not Contained within Ground Truth Segmentation Mask: {iou_gaze_inv_seg}")
+            print(f"Average Overlap Between Gaze Heatmap and Regions Not Contained within Ground Truth Segmentation Mask: {overlap_gaze_inv_seg}")
+
+            metrics["iou_gaze_inv_segs"].append(iou_gaze_inv_seg)
+            metrics["iou_gaze_segs"].append(iou_gaze_seg)
+            metrics["overlap_gaze_inv_segs"].append(overlap_gaze_inv_seg)
+
+
+        ### evaluate relationship/trend between gaze points being in segmentation region or being outside segmentation region and the time step in the seuqence (i.e plot)
+        corr = gaze_time_segmentation(gaze_sequences, segmentation_masks, map_size)
+        print(f"Correlation between gaze time step and being in ground truth segmentation mask: {corr}")
+
+        ### evaluate relationship/trend between gaze points being in segmentation region or being outside segmentation region and the time spent on the patch 
+        spent_corr = gaze_time_spent_segmentation(gaze_sequences, segmentation_masks, map_size)
+        print(f"Correlation between gaze time spent and being in ground truth segmentation mask: {spent_corr}")
+
+        metrics_df = pd.DataFrame.from_dict(metrics)
+        print(metrics_df)
+
+        metrics_json = metrics_df.to_json(orient="index")
+        with open('./gaze_analysis_results/metrics_224.json', 'w') as f:
+            json.dump(metrics_json, f)
+        
+
     else:
         raise ValueError("Map size not supported under current analysis")
 

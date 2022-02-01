@@ -289,8 +289,10 @@ def load_gaze_attribute_labels(source, split_type, task, seed):
     
     if task == "heatmap1":
         grid_size = 4 #3
-    else:
+    elif task == "heatmap2":
         grid_size = 7 #2 
+    else:
+        grid_size = 224
 
  
     heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)
