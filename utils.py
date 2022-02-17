@@ -316,3 +316,17 @@ def rle2mask(rle, width, height):
         current_position += lengths[index]
 
     return mask.reshape(width, height)
+
+
+def create_masked_image(x, segmentation_mask):
+    """
+    masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
+    to be used in get_item of dataloader 
+    """
+
+    shuffled_x = x*(1 - segmentation_mask)
+    shuffled_x = ## the background information should be shuffled only 
+    
+    
+    x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
+    return x_masked 
