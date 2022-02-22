@@ -21,8 +21,9 @@ from torchvision import datasets, models, transforms
 import copy
 from dataloader import fetch_dataloaders
 
-from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs
+from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
 from models.extract_CAM import get_CAM_from_img
+from models.extract_activations import get_model_activations
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -43,13 +44,15 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', None], default=None, help="Type of gaze enhanced expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
     parser.add_argument("--gan_positive_model", type=str, default=None, help="Location of saved GAN model for the positive class")
     parser.add_argument("--gan_negative_model", type=str, default=None, help="Location of saved GAN model for the negative class")
     parser.add_argument("--gan_type", type=str, choices=['gan','wgan', 'acgan', 'cgan', None], default=None, help="GAN type to load in")
+
+    parser.add_argument("--actdiff_lambda", type=float, default=0, help="Weight associated with the actdiff loss")
 
     args = parser.parse_args()
     return args
@@ -210,7 +213,7 @@ def evaluate(
         saved = probs_cat if save_type == "probs" else logits_cat
         return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None):
+def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None):
 
 
     loss_meter, acc_meter = [AverageMeter()]*2
@@ -271,8 +274,20 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                         cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
             a_loss = cum_losses.sum()
 
+        actdiff_loss = 0
+        if args.actdiff_lambda:
+            batch_size = len(targets)
+            cum_activation_losses = logits.new_zeros(batch_size)
+            for i in range(n):
+                image = inputs[i,...]
+                masked_image = gaze_attributes[i,...]
+                regular_activations = get_model_activations(image, model)
+                masked_activations = get_model_activations(masked_image, model)
+                cum_activation_losses[i] = calculate_actdiff_loss(regular_activations, masked_activations)
 
-        loss = c_loss + a_loss
+            actdiff_loss = cum_activation_losses.sum()
+
+        loss = c_loss + a_loss + actdiff_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -332,6 +347,7 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             cam_weight=args.cam_weight,
             cam_convex_alpha=args.cam_convex_alpha,
             gaze_task=args.gaze_task
+            args = args 
         )
 
         val_loss, val_acc, val_auroc, _, _= evaluate(
@@ -391,7 +407,7 @@ def main():
         model.cuda()
 
 
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
         params_to_update = model.parameters()
 
@@ -450,7 +466,7 @@ def main():
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
         model.load_state_dict(torch.load(args.checkpoint_dir))
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
         print(f"evaluating on {args.test_set}:")
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
