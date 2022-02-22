@@ -385,7 +385,7 @@ def main():
     if args.checkpoint_dir is None:
 
 
-        model = models.resnet50(pretrained=True)
+        model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
         model.cuda()

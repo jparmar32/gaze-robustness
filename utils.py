@@ -325,7 +325,12 @@ def create_masked_image(x, segmentation_mask):
     """
 
     shuffled_x = x*(1 - segmentation_mask)
-    shuffled_x = ## the background information should be shuffled only 
+    shuffled_x = ## the background information should be shuffled only
+
+    ### what we should do is take shuffled_x, flatten it, take indices where it is greater than 0,
+    ### shuffle those, and then reshape back into the original size 
+
+    torch.randperm(tmp.nelement()) 
     
     
     x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
