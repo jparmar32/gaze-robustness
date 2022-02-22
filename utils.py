@@ -331,7 +331,7 @@ def create_masked_image(x, segmentation_mask):
     shuffled_flattened[shuffled_indices] = shuffled_flattened[shuffled_indices[torch.randperm(torch.numel(shuffled_indices))]]
     shuffled_x = shuffled_flattened.reshape(shuffled_x.shape)    
     #x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
-    x_masked = x*segmentation_mask + x_masked
+    x_masked = x*segmentation_mask + shuffled_x
     
     return x_masked 
 

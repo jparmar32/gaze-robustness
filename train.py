@@ -228,6 +228,8 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
+            if gaze_task == "actdiff":
+                gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
         output = model(inputs)
 
@@ -274,19 +276,21 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                         cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
             a_loss = cum_losses.sum()
 
+        
+        
         actdiff_loss = 0
         if args.actdiff_lambda:
             batch_size = len(targets)
             cum_activation_losses = logits.new_zeros(batch_size)
-            for i in range(n):
-                image = inputs[i,...]
-                masked_image = gaze_attributes[i,...]
+            for i in range(batch_size):
+                image = inputs[i,...].unsqueeze(0)
+                masked_image = gaze_attributes[i,...].unsqueeze(0)
                 regular_activations = get_model_activations(image, model)
                 masked_activations = get_model_activations(masked_image, model)
                 cum_activation_losses[i] = calculate_actdiff_loss(regular_activations, masked_activations)
-
             actdiff_loss = cum_activation_losses.sum()
 
+        
         loss = c_loss + a_loss + actdiff_loss
 
         optimizer.zero_grad()
@@ -346,7 +350,7 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             use_cuda=use_cuda,
             cam_weight=args.cam_weight,
             cam_convex_alpha=args.cam_convex_alpha,
-            gaze_task=args.gaze_task
+            gaze_task=args.gaze_task,
             args = args 
         )
 

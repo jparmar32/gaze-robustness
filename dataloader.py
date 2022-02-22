@@ -173,6 +173,7 @@ class RoboGazeDataset(Dataset):
                     # extract segmask
                     segmask_org = rle2mask(rle, 1024, 1024).T
                     segmask = resize(segmask_org, (self.IMG_SIZE,self.IMG_SIZE))
+                    segmask = torch.LongTensor(segmask)
                     segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
                     img_masked = create_masked_image(img, segmask)
                     return img, label, img_masked
