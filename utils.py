@@ -317,21 +317,19 @@ def rle2mask(rle, width, height):
 
     return mask.reshape(width, height)
 
-
+## this will be called in get_item within the dataloader (i.e works on one example)
 def create_masked_image(x, segmentation_mask):
     """
     masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
     to be used in get_item of dataloader 
     """
-
-    shuffled_x = x*(1 - segmentation_mask)
-    shuffled_x = ## the background information should be shuffled only
-
-    ### what we should do is take shuffled_x, flatten it, take indices where it is greater than 0,
-    ### shuffle those, and then reshape back into the original size 
-
-    torch.randperm(tmp.nelement()) 
-    
-    
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.long()
+    shuffled_x = x*(inverse_segmentation_mask)
+    shuffled_flattened = shuffled_x.flatten()
+    shuffled_indices = torch.where(shuffled_flattened > 0) [0]
+    shuffled_flattened[shuffled_indices] = shuffled_flattened[shuffled_indices[torch.randperm(torch.numel(shuffled_indices))]]
+    shuffled_x = shuffled_flattened.reshape(shuffled_x.shape)    
     x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
+    
     return x_masked 
