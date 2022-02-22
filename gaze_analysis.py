@@ -457,7 +457,7 @@ def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7, image_an
         for t in np.arange(threshold, threshold_max + interval, interval):
             metrics["threshold"].append(t)
             print(f"Using a threshold of: {t}")
-            iou_gaze_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, map_size, inverse_segmentation = False ,iou = True)
+            iou_gaze_seg = gaze_heatmap_segmentation_mask(gaze_heatmaps, segmentation_masks, t, map_size, inverse_segmentation = False ,iou = False)
             print(f"Avergage IoU Between Gaze Heatmap and Ground Truth Segmentation Mask: {iou_gaze_seg}")
 
             ### evaluate overlap between current 7 x 7 heatmap and not segmentation mask regions
@@ -535,6 +535,6 @@ def main(threshold, threshold_max = .95, interval = 0.05, map_size = 7, image_an
         raise ValueError("Map size not supported under current analysis")
 
 if __name__ == "__main__":
-    main(threshold = 0, threshold_max=0.95, map_size = 224, image_analysis=True)
-    #main(threshold = 0, threshold_max=0.95, map_size = 7, image_analysis=False)
+    #main(threshold = 0, threshold_max=0.95, map_size = 224, image_analysis=True)
+    main(threshold = 0, threshold_max=0.95, map_size = 7, image_analysis=False)
 
