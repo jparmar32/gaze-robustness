@@ -333,3 +333,23 @@ def create_masked_image(x, segmentation_mask):
     x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
     
     return x_masked 
+
+## implement in the batch case first, should 
+def calculate_actdiff_loss(regular_activatons, masked_activations):
+    """
+    regular_activtations: list of activations produced by the original image in the model
+    masked_activations: list of activations produced by the masked image in the mdodel
+    """
+
+    assert len(regular_activatons) == len(masked_activations)
+
+    two_norm = torch.nn.modules.distance.PairwiseDistance(p=2)
+
+    all_dists = []
+    #L2 Distances between activations 
+    for reg_act, masked_act in zip(regular_activatons, masked_activations):
+        all_dists.append(two_norm(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+
+    actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
+
+    return(actdiff_loss)
