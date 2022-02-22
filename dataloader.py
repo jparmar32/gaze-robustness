@@ -11,10 +11,11 @@ import torchvision
 from skimage.transform import resize
 import math
 
-from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image
 
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
+
 
 
 class RoboGazeDataset(Dataset):
@@ -50,6 +51,7 @@ class RoboGazeDataset(Dataset):
         if self.source not in ['cxr_a', 'cxr_p']:
             self.ood = True
 
+        self.IMG_SIZE = 224
         self.gan = gan
         self.data_dir = data_dir
         self.split_type = split_type
@@ -159,6 +161,27 @@ class RoboGazeDataset(Dataset):
                 gaze_attribute_dict = {"gaze_attribute": gaze_attribute, "average_hm":self.average_heatmap}
 
                 return img, label, gaze_attribute_dict
+
+            ### neet to return regular image, label, and masked image
+            if self.gaze_task == "actdiff":
+
+                rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
+                y_true = rle != " -1"
+
+                ### use the segmentation mask
+                if y_true:
+                    # extract segmask
+                    segmask_org = rle2mask(rle, 1024, 1024).T
+                    segmask = resize(segmask_org, (self.IMG_SIZE,self.IMG_SIZE))
+                    segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
+                    img_masked = create_masked_image(img, segmask)
+                    return img, label, img_masked
+
+                ## we don't have a segmentation mask for the image, as in actdiff set segmentation mask to all 1
+                else:
+                    segmask = torch.ones(img.shape)
+                    img_masked = create_masked_image(img, segmask)
+                    return img, label, img_masked
 
             if self.gaze_task == "segmentation_reg":
             
