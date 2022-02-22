@@ -20,6 +20,7 @@ import torchvision
 from torchvision import datasets, models, transforms
 import copy
 from dataloader import fetch_dataloaders
+from tqdm import tqdm
 
 from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
 from models.extract_CAM import get_CAM_from_img
@@ -220,7 +221,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
     all_targets, all_probs = [], []
     auroc = -1
     model.train()
-    for batch_idx, batch in enumerate(loader):
+    for batch_idx, batch in tqdm(enumerate(loader), total = len(loader)):
 
         #gaze_attribute here is tthe heatmap
         inputs, targets, gaze_attributes = batch
