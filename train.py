@@ -434,34 +434,50 @@ def main():
 
             os.makedirs(save_path, exist_ok=True)
 
-            torch.save(model.state_dict(), save_path + "/model.pt")
+            torch.save(best_model.state_dict(), save_path + "/model.pt")
             print(f"Saved Best Model to {save_path}")
         
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+        val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
         else:
             print(f"Best Test Auroc {test_auroc}")
 
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
+        val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
 
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
             min_auc = min(save_dict['test_auroc'].values())
             save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+
+            max_loss = max(val_save_dict['test_loss'].values())
+            min_acc = min(val_save_dict['test_acc'].values())
+            min_auc = min(val_save_dict['test_auroc'].values())
+            val_save_dict = {"val_loss": max_loss, "val_acc": min_acc, "val_auroc": min_auc}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
+        os.makedirs(val_save_res, exist_ok=True)
+        val_save_res = val_save_res + "/results.json"
+
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
+
+        with open(val_save_res, 'w') as fp:
+            json.dump(val_save_dict, fp)
 
 
     else:
@@ -481,25 +497,39 @@ def main():
         else:
             print(f"Best Test Auroc {test_auroc}")
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
-        
+        val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
+
         #save results 
 
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
             min_auc = min(save_dict['test_auroc'].values())
             save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+
+            max_loss = max(val_save_dict['test_loss'].values())
+            min_acc = min(val_save_dict['test_acc'].values())
+            min_auc = min(val_save_dict['test_auroc'].values())
+            val_save_dict = {"val_loss": max_loss, "val_acc": min_acc, "val_auroc": min_auc}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
-        
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
+        os.makedirs(val_save_res, exist_ok=True)
+        val_save_res = val_save_res + "/results.json"
+
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
+
+        with open(val_save_res, 'w') as fp:
+            json.dump(val_save_dict, fp)
 
 if __name__ == "__main__":
     main()

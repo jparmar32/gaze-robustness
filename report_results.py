@@ -25,7 +25,7 @@ wds = [1, .1, .01, .001, .0001]
 #no .0001
 
 
-'''#for each lr, wd combo gget all seeds, then give results of highest 
+'''#for each lr, wd combo get all seeds, then give results of highest 
 best_auroc = 0.0
 best_lr = 0
 best_wd = 0

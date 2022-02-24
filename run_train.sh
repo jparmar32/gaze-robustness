@@ -1,26 +1,27 @@
 #!/bin/sh
 train="cxr_p"
-test="chexpert"
+test="cxr_p"
 
-for cw in 0.01 0.1 1
-do  
-    for seed in 0 1 2 3 4 5 6 7 8 9
+for seed in 0 1 2 3 4 #5 6 7 8 9
+do 
+    for lr in 1e-5 1e-4 1e-3 1e-2
     do
+        for al in 1e-5 1e-4 1e-3 1e-2 1e-1 1e-0
+        do
 
-        python ./train.py \
-            --epochs 15 \
+            python ./train.py \
+            --epochs 100 \
             --min_lr 0 \
-            --lr .0001 \
-            --wd .1 \
+            --lr $lr \
+            --wd 0 \
             --seed $seed \
-            --batch_size 8 \
+            --batch_size 16 \
             --train_set $train \
             --test_set $test \
-            --save_dir "/mnt/data/gaze_robustness_results/segmentation_reg/cw_$cw" \
-            --cam_weight $cw \
-            --checkpoint_dir "/mnt/data/gaze_robustness_results/segmentation_reg/cw_$cw/train_set_$train/seed_$seed/model.pt" \
-            --ood_shift "hospital" \
-            --gaze_task "segmentation_reg"
+            --save_dir "/mnt/data/gaze_robustness_results/actdiff/seed_$seed/lr_$lr/actdifflamb_$al" \
+            --save_model \
+            --gaze_task "actdiff" \
+            --actdiff_lambda $al \
             #--save_model \
             #--ood_shift "hospital" \
             #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
@@ -32,8 +33,8 @@ do
             #--cam_convex_alpha 0.5 \
             #--subclass_eval \
             #--save_model
-            
-            
+
+        done
     done
 done
 
