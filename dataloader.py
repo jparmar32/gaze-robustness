@@ -182,7 +182,7 @@ class RoboGazeDataset(Dataset):
 
                 ## we don't have a segmentation mask for the image, as in actdiff set segmentation mask to all 1
                 else:
-                    segmask = torch.ones(img.shape)
+                    segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE))
                     img_masked = create_masked_image(img, segmask)
                     return img, label, img_masked
 
