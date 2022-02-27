@@ -17,6 +17,7 @@ from utils import load_file_markers, get_data_transforms, load_gaze_attribute_la
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
 
+import matplotlib.pyplot as plt
 
 
 class RoboGazeDataset(Dataset):
@@ -174,7 +175,7 @@ class RoboGazeDataset(Dataset):
                     # extract segmask
                     segmask_org = rle2mask(rle, 1024, 1024).T
                     segmask = resize(segmask_org, (self.IMG_SIZE,self.IMG_SIZE))
-                    segmask = torch.LongTensor(segmask)
+                    segmask = torch.from_numpy(segmask)
                     segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
                     img_masked = create_masked_image(img, segmask)
                     return img, label, img_masked
@@ -273,10 +274,13 @@ class SyntheticDataset(Dataset):
 
         seg = (seg > 0) * 1.0
 
-        seg = torch.from_numpy(seg)
+        seg = torch.from_numpy(seg).long()
         image = torch.from_numpy(image)
-
-        return image, int(label), seg
+        image = image.unsqueeze(0)
+        image = torch.cat([image, image, image])
+        image = image.float()
+        img_masked = create_masked_image(image, seg)
+        return image, int(label), img_masked
 
 
 def fetch_dataloaders(
@@ -286,7 +290,7 @@ def fetch_dataloaders(
     seed,
     batch_size,
     num_workers,
-    gaze_task = None, #either none, data augment, cam reg, cam reg convex
+    gaze_task = None, #either none, data augment, cam reg, cam reg convex actdiff
     ood_set = None,
     ood_shift = None,
     subclass = False,
@@ -406,26 +410,32 @@ def fetch_dataloaders(
                 dataset = torch.utils.data.ConcatDataset([original_dataset, positive_fake_data, negative_fake_data])
 
             else:
-                dataset = RoboGazeDataset(
-                source=source,
-                data_dir=data_dir,
-                split_type=split,
-                gaze_task = gaze_task,
-                transform=transforms[split],
-                val_scale=val_scale,
-                seed=seed,
-                subclass=subclass)
+                if gaze_task == "actdiff" and source == "synth":
+                    dataset = SyntheticDataset(split=split, blur=0.817838)
+                else:
+                    dataset = RoboGazeDataset(
+                    source=source,
+                    data_dir=data_dir,
+                    split_type=split,
+                    gaze_task = gaze_task,
+                    transform=transforms[split],
+                    val_scale=val_scale,
+                    seed=seed,
+                    subclass=subclass)
         else:
-            dataset = RoboGazeDataset(
-                source=source,
-                data_dir=data_dir,
-                split_type=split,
-                gaze_task = gaze_task,
-                transform=transforms[split],
-                val_scale=val_scale,
-                seed=seed,
-                subclass=subclass
-            )
+            if gaze_task == "actdiff" and source == "synth":
+                    dataset = SyntheticDataset(split=split, blur=0.817838)
+            else:
+                dataset = RoboGazeDataset(
+                    source=source,
+                    data_dir=data_dir,
+                    split_type=split,
+                    gaze_task = gaze_task,
+                    transform=transforms[split],
+                    val_scale=val_scale,
+                    seed=seed,
+                    subclass=subclass
+                )
 
         dataloaders[split] = (
             DataLoader(
@@ -507,7 +517,7 @@ def fetch_entire_dataloader(source,
 
 if __name__ == "__main__":
 
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="segmentation_reg")
+    dls = fetch_dataloaders("synth","/media",0.2,2,32,4, gaze_task="actdiff")
     print(len(dls['train'].dataset))
     print(len(dls['val'].dataset))
     print(len(dls['test'].dataset))
@@ -517,18 +527,22 @@ if __name__ == "__main__":
     #dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan = True, label_class=1)
     #print(len(dl.dataset))
     #dataiter = iter(dl)
-    #for i in range(1):
-        #images, labels= dataiter.next()
+
+    dataiter = iter(dls['train'])
+    for i in range(1):
+        images, labels, seg = dataiter.next()
+        print(images.shape)
+        #print(seg.shape)
         #print(images.shape)
         #grid_img = torchvision.utils.make_grid(images, nrow=8)
         #torchvision.utils.save_image(grid_img, 'downsampled_cxr.png')
 
-    dataiter = iter(dls['train'])
+    #dataiter = iter(dls['train'])
 
-    for i in range(1):
-        images, labels, gaze = dataiter.next()
-        print(len(dls['val'].dataset))
-        print(gaze.shape)
+    #for i in range(1):
+        #images, labels, gaze = dataiter.next()
+        #print(len(dls['val'].dataset))
+        #print(gaze.shape)
         #print(images[0, 0:10, 0:10])
         #print(images[1, 0:10, 0:10])
     

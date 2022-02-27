@@ -11,6 +11,8 @@ import torch
 import pdb
 import sklearn.metrics as skl
 
+import matplotlib.pyplot as plt
+
 def load_file_markers(
     source,
     split_type,
@@ -323,17 +325,23 @@ def create_masked_image(x, segmentation_mask):
     masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
     to be used in get_item of dataloader 
     """
+
     inverse_segmentation_mask = 1 - segmentation_mask
-    inverse_segmentation_mask = inverse_segmentation_mask.long()
-    shuffled_x = x*(inverse_segmentation_mask)
-    shuffled_flattened = shuffled_x.flatten()
-    shuffled_indices = torch.where(shuffled_flattened > 0) [0]
-    shuffled_flattened[shuffled_indices] = shuffled_flattened[shuffled_indices[torch.randperm(torch.numel(shuffled_indices))]]
-    shuffled_x = shuffled_flattened.reshape(shuffled_x.shape)    
-    #x_masked = torch.where(segmentation_mask > 0, x, shuffled_x)
-    x_masked = x*segmentation_mask + shuffled_x
-    
-    return x_masked 
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask]*x.shape[0])
+
+    ### obtain the values contained at the inverse_segmentation_mask indices 
+    shuffled = x[inverse_segmentation_mask]
+
+    ### shuffle these values
+    shuffled = shuffled[torch.randperm(torch.numel(shuffled))]
+
+    ### append the shuffled values to the original image times the segmentation mask
+    x_masked = x*segmentation_mask
+    x_masked[inverse_segmentation_mask] = shuffled
+
+    return x_masked
 
 ## implement in the batch case first, should 
 def calculate_actdiff_loss(regular_activations, masked_activations):

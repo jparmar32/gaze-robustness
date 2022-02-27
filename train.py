@@ -37,8 +37,8 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
 
-    parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p'], required=True, help="Set to train on")
-    parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8'], required=True, help="Test set to evaluate on")
+    parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p', 'synth'], required=True, help="Set to train on")
+    parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8', 'synth'], required=True, help="Test set to evaluate on")
     parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")
@@ -127,7 +127,7 @@ def evaluate(
 
                         dev = "cpu" 
                         if use_cuda:  
-                            dev = "cuda:0" 
+                            dev = "cuda" 
                         device = torch.device(dev)  
                         output_torch = output_torch.to(device)
                         target_torch = target_torch.to(device)
@@ -288,9 +288,8 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_image = gaze_attributes[i,...].unsqueeze(0)
                 regular_activations = get_model_activations(image, model)
                 masked_activations = get_model_activations(masked_image, model)
-                cum_activation_losses[i] = calculate_actdiff_loss(regular_activations, masked_activations)
+                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations)
             actdiff_loss = cum_activation_losses.sum()
-
         
         loss = c_loss + a_loss + actdiff_loss
 
