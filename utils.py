@@ -329,17 +329,22 @@ def create_masked_image(x, segmentation_mask):
     inverse_segmentation_mask = 1 - segmentation_mask
     inverse_segmentation_mask = inverse_segmentation_mask.bool()
     inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
-    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask]*x.shape[0])
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
 
     ### obtain the values contained at the inverse_segmentation_mask indices 
-    shuffled = x[inverse_segmentation_mask]
+    assert inverse_segmentation_mask.shape == x.shape
 
-    ### shuffle these values
-    shuffled = shuffled[torch.randperm(torch.numel(shuffled))]
+    try:
+        shuffled = x[inverse_segmentation_mask]
 
-    ### append the shuffled values to the original image times the segmentation mask
-    x_masked = x*segmentation_mask
-    x_masked[inverse_segmentation_mask] = shuffled
+        ### shuffle these values
+        shuffled = shuffled[torch.randperm(torch.numel(shuffled))]
+
+        ### append the shuffled values to the original image times the segmentation mask
+        x_masked = x*segmentation_mask
+        x_masked[inverse_segmentation_mask] = shuffled
+    except:
+        import pdb; pdb.set_trace()
 
     return x_masked
 
