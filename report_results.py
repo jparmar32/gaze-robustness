@@ -3,22 +3,29 @@ import numpy as np
 import os
 
 
-train_set = 'cxr_p'
-test_set = 'cxr_p'
+train_set = 'synth'
+test_set = 'synth'
 ood_shift = None
+val = True
+metric = 'test_auroc'
 subclass_eval = None
-gaze_task = "segmentation_reg"
-results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/cw_0.01/train_set_{train_set}/test_set_{test_set}'
+gaze_task = "actdiff"
+results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/test_set_{test_set}'
 if ood_shift is not None:
     results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/cw_1/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
+if val:
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/val_set'
+    metric = 'val_auroc'
+
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
+    
 
 
 #results_dir = f'/mnt/gaze_robustness_results'
 
-seeds = [x for x in range(10)] 
+seeds = [x for x in range(5)] 
 lrs = [.01, .001, .0001]
 wds = [1, .1, .01, .001, .0001]
 
@@ -48,7 +55,7 @@ for lr in lrs:
 
             with open(res_file) as data_file:
                 results = json.load(data_file)
-                means.append(results['test_auroc'])
+                means.append(results[metric])
 
 
 
@@ -71,7 +78,7 @@ for cv in seeds:
 
     with open(res_file) as data_file:
         results = json.load(data_file)
-        means.append(results['test_auroc'])
+        means.append(results[metric])
 
 
 print(f"\nMean Auroc: {np.mean(means):.3f}")
