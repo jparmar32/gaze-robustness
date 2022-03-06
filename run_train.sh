@@ -1,6 +1,6 @@
 #!/bin/sh
 train="cxr_p"
-test="cxr_p"
+test="chestxray8"
 
 #for seed in 0 1 2 3 4 #5 6 7 8 9
 #do 
@@ -19,11 +19,11 @@ test="cxr_p"
 #   --gaze_task "actdiff" \
 #   --actdiff_lambda 1.15e-1 
 #done
-for seed in 0 1 #1 2 3 4 5 6 7 8 9
+for seed in 0 1 2 3 4 5 6 7 8 9
 do 
-   for lr in 1e-5 1e-4 1e-3 1e-2
+   for lr in 1e-4 
    do
-       for al in 1e-5 1e-4 1e-3 1e-2 1e-1 1e-0
+       for al in 1e-5 
        do
 
            python ./train.py \
@@ -35,11 +35,12 @@ do
            --batch_size 16 \
            --train_set $train \
            --test_set $test \
-           --save_dir "/mnt/data/gaze_robustness_results/actdiff/tune_$train/lr_$lr/actdifflamb_$al" \
-           --save_model \
-           --gaze_task "actdiff" \
+           --save_dir "/mnt/data/gaze_robustness_results/actdiff_gaze/train_set_$train/lr_$lr/actdifflamb_$al" \
+           --gaze_task "actdiff_gaze" \
            --actdiff_lambda $al \
+           --save_model \
            #--save_model \
+           #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff/tune_$train/lr_$lr/actdifflamb_$al/train_set_$train/seed_$seed/model.pt" \
            #--ood_shift "hospital" \
            #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
            #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \

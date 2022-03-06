@@ -186,6 +186,23 @@ class RoboGazeDataset(Dataset):
                     img_masked = create_masked_image(img, segmask)
                     return img, label, img_masked
 
+            ### neet to return regular image, label, and masked image from the gaze heatmap
+            if self.gaze_task == "actdiff_gaze":
+
+                ### obtain 7 x 7 gaze heatmap
+                gaze_map = gaze_attribute.reshape(7,7)
+                gaze_map = (gaze_map > 0) * 1.0 # set this to be a threshold arg to pass in 
+
+                ### resize up to 224 x 224
+                gaze_map = resize(gaze_map, (self.IMG_SIZE,self.IMG_SIZE))
+                gaze_map = torch.from_numpy(gaze_map)
+                gaze_map = torch.where(gaze_map > 0, torch.ones(gaze_map.shape), torch.zeros(gaze_map.shape)).long()
+                
+                ### get masked image, 
+                img_masked = create_masked_image(img, gaze_map)
+
+                return img, label, img_masked
+
             if self.gaze_task == "segmentation_reg":
             
                 rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
@@ -517,7 +534,7 @@ def fetch_entire_dataloader(source,
 
 if __name__ == "__main__":
 
-    dls = fetch_dataloaders("synth","/media",0.2,2,32,4, gaze_task="actdiff")
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,1,4, gaze_task="actdiff_gaze")
     print(len(dls['train'].dataset))
     print(len(dls['val'].dataset))
     print(len(dls['test'].dataset))
@@ -531,7 +548,7 @@ if __name__ == "__main__":
     dataiter = iter(dls['train'])
     for i in range(1):
         images, labels, seg = dataiter.next()
-        print(images.shape)
+        #print(images.shape)
         #print(seg.shape)
         #print(images.shape)
         #grid_img = torchvision.utils.make_grid(images, nrow=8)

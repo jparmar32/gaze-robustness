@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
@@ -229,7 +229,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
-            if gaze_task == "actdiff":
+            if gaze_task in ["actdiff", 'actdiff_gaze']:
                 gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
         output = model(inputs)
@@ -465,7 +465,7 @@ def main():
             val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
-            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
@@ -490,6 +490,7 @@ def main():
         model = model.to(device)
         print(f"evaluating on {args.test_set}:")
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+        val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
 
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
@@ -514,10 +515,10 @@ def main():
             val_save_dict = {"val_loss": max_loss, "val_acc": min_acc, "val_auroc": min_auc}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
-            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
-            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
