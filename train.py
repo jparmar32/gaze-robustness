@@ -54,6 +54,7 @@ def parse_args():
     parser.add_argument("--gan_type", type=str, choices=['gan','wgan', 'acgan', 'cgan', None], default=None, help="GAN type to load in")
 
     parser.add_argument("--actdiff_lambda", type=float, default=0, help="Weight associated with the actdiff loss")
+    parser.add_argument("--actdiff_gaze_threshold", type=float, default=0, help="Value to threshold Gaze Heatmaps at")
 
     args = parser.parse_args()
     return args
