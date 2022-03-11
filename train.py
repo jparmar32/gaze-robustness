@@ -83,10 +83,12 @@ def evaluate(
 
                 loss_meter_dict[(i,j)] = AverageMeter()
                 acc_meter_dict[(i,j)] = AverageMeter()
-                auroc_dict[(i,j)] = 0
                 all_targets_dict[(i,j)] = []
                 all_probs_dict[(i,j)] = []
                 all_logits_dict[(i,j)] = []
+
+        auroc_dict["robust_auroc"] = 0
+        auroc_dict["majority_auroc"] = 0
 
         all_ids = []
         model.eval()
@@ -159,7 +161,23 @@ def evaluate(
                 all_probs_dict[key].append(probs.cpu())
                 targets_cat = torch.cat(all_targets_dict[key]).numpy()
                 probs_cat = torch.cat(all_probs_dict[key]).numpy()
-                auroc_dict[key] = compute_roc_auc(targets_cat, probs_cat)
+                
+        ## class label is 1 and subclass is 0, class label is 0 and subclass is 1
+        robust_targets = all_targets_dict[(1,0)] + all_targets_dict[(0,1)]
+        robust_probs = all_probs_dict[(1,0)] + all_probs_dict[(0,1)]
+
+        majority_targets = all_targets_dict[(1,1)] + all_targets_dict[(0,0)]
+        majority_probs = all_probs_dict[(1,1)] + all_probs_dict[(0,0)]
+
+        robust_targets_cat = torch.cat(robust_targets).numpy()
+        robust_probs_cat = torch.cat(robust_probs).numpy()
+
+        majority_targets_cat = torch.cat(majority_targets).numpy()
+        majority_probs_cat = torch.cat(majority_probs).numpy()
+
+        auroc_dict["robust_auroc"] = compute_roc_auc(robust_targets_cat, robust_probs_cat)
+        auroc_dict["majority_auroc"] = compute_roc_auc(majority_targets_cat, majority_probs_cat)
+         
 
         saved_dict = {}
         for i in range(args.num_classes):
@@ -392,9 +410,9 @@ def main():
     #load in data loader
 
     if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     if args.gaze_task is not None:
         print(f"Running a gaze experiment: {args.gaze_task}")
@@ -437,29 +455,24 @@ def main():
             print(f"Saved Best Model to {save_path}")
         
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
-        val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
+        if not args.subclass_eval:
+            val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
         else:
             print(f"Best Test Auroc {test_auroc}")
 
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
-        val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
+        if not args.subclass_eval:
+            val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
 
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
-            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
-            min_auc = min(save_dict['test_auroc'].values())
-            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
-
-            max_loss = max(val_save_dict['test_loss'].values())
-            min_acc = min(val_save_dict['test_acc'].values())
-            min_auc = min(val_save_dict['test_auroc'].values())
-            val_save_dict = {"val_loss": max_loss, "val_acc": min_acc, "val_auroc": min_auc}
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "robust_auroc": save_dict['test_auroc']["robust_auroc"]}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
             val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
@@ -469,14 +482,16 @@ def main():
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
-        os.makedirs(val_save_res, exist_ok=True)
-        val_save_res = val_save_res + "/results.json"
+        if not args.subclass_eval:
+            os.makedirs(val_save_res, exist_ok=True)
+            val_save_res = val_save_res + "/results.json"
 
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
 
-        with open(val_save_res, 'w') as fp:
-            json.dump(val_save_dict, fp)
+        if not args.subclass_eval:
+            with open(val_save_res, 'w') as fp:
+                json.dump(val_save_dict, fp)
 
 
     else:
@@ -490,29 +505,26 @@ def main():
         model = model.to(device)
         print(f"evaluating on {args.test_set}:")
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
-        val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
+        if not args.subclass_eval:
+            val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
 
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
         else:
             print(f"Best Test Auroc {test_auroc}")
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
-        val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
+
+        if not args.subclass_eval:
+            val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
 
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
-            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
-            min_auc = min(save_dict['test_auroc'].values())
-            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "robust_auroc": save_dict['test_auroc']["robust_auroc"]}
 
-            max_loss = max(val_save_dict['test_loss'].values())
-            min_acc = min(val_save_dict['test_acc'].values())
-            min_auc = min(val_save_dict['test_auroc'].values())
-            val_save_dict = {"val_loss": max_loss, "val_acc": min_acc, "val_auroc": min_auc}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
             val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
@@ -522,14 +534,16 @@ def main():
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
-        os.makedirs(val_save_res, exist_ok=True)
-        val_save_res = val_save_res + "/results.json"
+        if not args.subclass_eval:
+            os.makedirs(val_save_res, exist_ok=True)
+            val_save_res = val_save_res + "/results.json"
 
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
 
-        with open(val_save_res, 'w') as fp:
-            json.dump(val_save_dict, fp)
+        if not args.subclass_eval:
+            with open(val_save_res, 'w') as fp:
+                json.dump(val_save_dict, fp)
 
 if __name__ == "__main__":
     main()

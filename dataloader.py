@@ -37,7 +37,8 @@ class RoboGazeDataset(Dataset):
         val_scale=0.2,
         seed=0,
         subclass=False,
-        gan = False
+        gan = False,
+        args = None
     ):
 
         """
@@ -83,6 +84,8 @@ class RoboGazeDataset(Dataset):
             seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
+
+        self.args = args
 
     def __len__(self):
         return len(self.file_markers)
@@ -186,12 +189,11 @@ class RoboGazeDataset(Dataset):
                     img_masked = create_masked_image(img, segmask)
                     return img, label, img_masked
 
-            ### neet to return regular image, label, and masked image from the gaze heatmap
+            ### need to return regular image, label, and masked image from the gaze heatmap
             if self.gaze_task == "actdiff_gaze":
-
                 ### obtain 7 x 7 gaze heatmap
                 gaze_map = gaze_attribute.reshape(7,7)
-                gaze_map = (gaze_map > 0) * 1.0 # set this to be a threshold arg to pass in 
+                gaze_map = (gaze_map > self.args.actdiff_gaze_threshold) * 1.0  
 
                 ### resize up to 224 x 224
                 gaze_map = resize(gaze_map, (self.IMG_SIZE,self.IMG_SIZE))
@@ -313,7 +315,8 @@ def fetch_dataloaders(
     subclass = False,
     gan_positive = None,
     gan_negative = None,
-    gan_type = None
+    gan_type = None,
+    args = None
 ):
 
     
@@ -336,7 +339,8 @@ def fetch_dataloaders(
                 transform=transforms[split],
                 val_scale=val_scale,
                 seed=seed,
-                subclass=subclass)
+                subclass=subclass,
+                args=args)
 
 
                 ## get positive and negative class amounts
@@ -438,7 +442,8 @@ def fetch_dataloaders(
                     transform=transforms[split],
                     val_scale=val_scale,
                     seed=seed,
-                    subclass=subclass)
+                    subclass=subclass,
+                    args=args)
         else:
             if gaze_task == "actdiff" and source == "synth":
                     dataset = SyntheticDataset(split=split, blur=0.817838)
@@ -451,7 +456,8 @@ def fetch_dataloaders(
                     transform=transforms[split],
                     val_scale=val_scale,
                     seed=seed,
-                    subclass=subclass
+                    subclass=subclass,
+                    args=args
                 )
 
         dataloaders[split] = (

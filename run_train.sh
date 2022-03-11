@@ -1,6 +1,6 @@
 #!/bin/sh
 train="cxr_p"
-test="chestxray8"
+test="cxr_p"
 
 #for seed in 0 1 2 3 4 #5 6 7 8 9
 #do 
@@ -35,13 +35,13 @@ do
            --batch_size 16 \
            --train_set $train \
            --test_set $test \
-           --save_dir "/mnt/data/gaze_robustness_results/actdiff_gaze/train_set_$train/lr_$lr/actdifflamb_$al" \
-           --gaze_task "actdiff_gaze" \
+           --save_dir "/mnt/data/gaze_robustness_results/resnet_only" \
            --actdiff_lambda $al \
-           --save_model \
+           --checkpoint_dir "/mnt/data/gaze_robustness_results/resnet_only/train_set_$train/seed_$seed/model.pt" \
+           --subclass_eval \
+           #--gaze_task "resnet_only" \
            #--save_model \
-           #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff/tune_$train/lr_$lr/actdifflamb_$al/train_set_$train/seed_$seed/model.pt" \
-           #--ood_shift "hospital" \
+           #--save_model \
            #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
            #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
            #--gan_type "gan" \
