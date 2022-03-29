@@ -4,27 +4,28 @@ import os
 
 
 train_set = 'cxr_p'
-test_set = 'cxr_p'
-ood_shift = None  #'age'
+test_set = 'chestxray8'
+ood_shift = "age" #'age'
 val = False
-metric = 'robust_auroc'
-subclass_eval = True
-gaze_task = "resnet_only"
+metric = 'test_auroc'
+subclass_eval = False
+gaze_task = "actdiff"
 tuning_eval = False
-results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/test_set_{test_set}'
-use_top_seeds = True
+seg_size = 224
+results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/seg_size_{seg_size}/train_set_{train_set}/test_set_{test_set}'
+use_top_seeds = False
 if ood_shift is not None:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/seg_size_{seg_size}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if val:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/val_set_{train_set}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/threshold_0/gazemap_size_{seg_size}/train_set_{train_set}/val_set_{test_set}'
     metric = 'val_auroc'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
 
 if tuning_eval:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/tune_{train_set}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/val_set_{test_set}'
     metric = 'val_auroc'
     
 

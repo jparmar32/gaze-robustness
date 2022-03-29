@@ -11,6 +11,7 @@ import torchvision
 from skimage.transform import resize
 import math
 from skimage.filters import gaussian
+import torch.nn as nn
 
 from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image
 
@@ -60,6 +61,7 @@ class RoboGazeDataset(Dataset):
         self.split_type = split_type
         self.transform = transform
         self.subclass = subclass
+        self.args = args
         self.file_markers = load_file_markers(
             source,
             split_type,
@@ -74,8 +76,11 @@ class RoboGazeDataset(Dataset):
             type_feature = None
             if self.gaze_task == "data_augment":
                 type_feature = "heatmap1"
+            elif self.gaze_task == "actdiff_gaze":
+                type_feature = f"heatmap_{self.args.actdiff_gazemap_size}"
             else:
                 type_feature = "heatmap2"
+
             gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed)
             self.gaze_features = gaze_attribute_labels_dict
 
@@ -85,7 +90,7 @@ class RoboGazeDataset(Dataset):
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
 
-        self.args = args
+        
 
     def __len__(self):
         return len(self.file_markers)
@@ -177,7 +182,18 @@ class RoboGazeDataset(Dataset):
                 if y_true:
                     # extract segmask
                     segmask_org = rle2mask(rle, 1024, 1024).T
-                    segmask = resize(segmask_org, (self.IMG_SIZE,self.IMG_SIZE))
+
+                    if self.args.actdiff_segmask_size != self.IMG_SIZE:
+
+                        segmask_int = nn.functional.max_pool2d(torch.tensor(segmask_org).unsqueeze(0), int(1024/self.args.actdiff_segmask_size)).squeeze().numpy()
+                        segmask_int = (segmask_int > 0) * 1
+                        segmask = resize(segmask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
+                    else:
+                        segmask = resize(segmask_org, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
                     segmask = torch.from_numpy(segmask)
                     segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
                     img_masked = create_masked_image(img, segmask)
@@ -192,11 +208,11 @@ class RoboGazeDataset(Dataset):
             ### need to return regular image, label, and masked image from the gaze heatmap
             if self.gaze_task == "actdiff_gaze":
                 ### obtain 7 x 7 gaze heatmap
-                gaze_map = gaze_attribute.reshape(7,7)
+                gaze_map = gaze_attribute.reshape(self.args.actdiff_gazemap_size,self.args.actdiff_gazemap_size)
                 gaze_map = (gaze_map > self.args.actdiff_gaze_threshold) * 1.0  
 
                 ### resize up to 224 x 224
-                gaze_map = resize(gaze_map, (self.IMG_SIZE,self.IMG_SIZE))
+                gaze_map = resize(gaze_map, (self.IMG_SIZE,self.IMG_SIZE)) ### change to change_map_size
                 gaze_map = torch.from_numpy(gaze_map)
                 gaze_map = torch.where(gaze_map > 0, torch.ones(gaze_map.shape), torch.zeros(gaze_map.shape)).long()
                 

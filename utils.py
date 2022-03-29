@@ -30,7 +30,7 @@ def load_file_markers(
 
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
-        file_markers_dir = os.path.join(file_dir, "trainval_list.pkl")
+        file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
         
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
@@ -294,7 +294,8 @@ def load_gaze_attribute_labels(source, split_type, task, seed):
     elif task == "heatmap2":
         grid_size = 7 #2 
     else:
-        grid_size = 224
+        gazemap_val = task.split("_")[1]
+        grid_size = int(gazemap_val)
 
  
     heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)
@@ -367,3 +368,15 @@ def calculate_actdiff_loss(regular_activations, masked_activations):
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
 
     return(actdiff_loss)
+
+'''
+def downsample_array():
+
+
+    pass
+
+### puts a 1 in the area where
+def upsample_binary_map(original_map, new_dimensions):
+    np.zeros()
+    pass
+'''

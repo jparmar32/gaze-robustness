@@ -55,6 +55,8 @@ def parse_args():
 
     parser.add_argument("--actdiff_lambda", type=float, default=0, help="Weight associated with the actdiff loss")
     parser.add_argument("--actdiff_gaze_threshold", type=float, default=0, help="Value to threshold Gaze Heatmaps at")
+    parser.add_argument("--actdiff_segmask_size", type=int, default=224, help="Segmentation Mask Resolution to Use")
+    parser.add_argument("--actdiff_gazemap_size", type=int, default=7, help="Gaze Heatmap Resolution to Use")
 
     args = parser.parse_args()
     return args
@@ -436,7 +438,7 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed {args.seed}")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff gazemap size: {args.actdiff_gazemap_size}")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)
