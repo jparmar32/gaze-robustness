@@ -20,9 +20,11 @@ import torchvision
 from torchvision import datasets, models, transforms
 import copy
 from dataloader import fetch_dataloaders
+from tqdm import tqdm
 
-from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs
+from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
 from models.extract_CAM import get_CAM_from_img
+from models.extract_activations import get_model_activations
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -35,21 +37,26 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
 
-    parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p'], required=True, help="Set to train on")
-    parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8'], required=True, help="Test set to evaluate on")
+    parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p', 'synth'], required=True, help="Set to train on")
+    parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8', 'synth'], required=True, help="Test set to evaluate on")
     parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', None], default=None, help="Type of gaze enhanced expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
     parser.add_argument("--gan_positive_model", type=str, default=None, help="Location of saved GAN model for the positive class")
     parser.add_argument("--gan_negative_model", type=str, default=None, help="Location of saved GAN model for the negative class")
     parser.add_argument("--gan_type", type=str, choices=['gan','wgan', 'acgan', 'cgan', None], default=None, help="GAN type to load in")
+
+    parser.add_argument("--actdiff_lambda", type=float, default=0, help="Weight associated with the actdiff loss")
+    parser.add_argument("--actdiff_gaze_threshold", type=float, default=0, help="Value to threshold Gaze Heatmaps at")
+    parser.add_argument("--actdiff_segmask_size", type=int, default=224, help="Segmentation Mask Resolution to Use")
+    parser.add_argument("--actdiff_gazemap_size", type=int, default=7, help="Gaze Heatmap Resolution to Use")
 
     args = parser.parse_args()
     return args
@@ -79,10 +86,12 @@ def evaluate(
 
                 loss_meter_dict[(i,j)] = AverageMeter()
                 acc_meter_dict[(i,j)] = AverageMeter()
-                auroc_dict[(i,j)] = 0
                 all_targets_dict[(i,j)] = []
                 all_probs_dict[(i,j)] = []
                 all_logits_dict[(i,j)] = []
+
+        auroc_dict["robust_auroc"] = 0
+        auroc_dict["majority_auroc"] = 0
 
         all_ids = []
         model.eval()
@@ -123,7 +132,7 @@ def evaluate(
 
                         dev = "cpu" 
                         if use_cuda:  
-                            dev = "cuda:0" 
+                            dev = "cuda" 
                         device = torch.device(dev)  
                         output_torch = output_torch.to(device)
                         target_torch = target_torch.to(device)
@@ -155,7 +164,23 @@ def evaluate(
                 all_probs_dict[key].append(probs.cpu())
                 targets_cat = torch.cat(all_targets_dict[key]).numpy()
                 probs_cat = torch.cat(all_probs_dict[key]).numpy()
-                auroc_dict[key] = compute_roc_auc(targets_cat, probs_cat)
+                
+        ## class label is 1 and subclass is 0, class label is 0 and subclass is 1
+        robust_targets = all_targets_dict[(1,0)] + all_targets_dict[(0,1)]
+        robust_probs = all_probs_dict[(1,0)] + all_probs_dict[(0,1)]
+
+        majority_targets = all_targets_dict[(1,1)] + all_targets_dict[(0,0)]
+        majority_probs = all_probs_dict[(1,1)] + all_probs_dict[(0,0)]
+
+        robust_targets_cat = torch.cat(robust_targets).numpy()
+        robust_probs_cat = torch.cat(robust_probs).numpy()
+
+        majority_targets_cat = torch.cat(majority_targets).numpy()
+        majority_probs_cat = torch.cat(majority_probs).numpy()
+
+        auroc_dict["robust_auroc"] = compute_roc_auc(robust_targets_cat, robust_probs_cat)
+        auroc_dict["majority_auroc"] = compute_roc_auc(majority_targets_cat, majority_probs_cat)
+         
 
         saved_dict = {}
         for i in range(args.num_classes):
@@ -210,14 +235,14 @@ def evaluate(
         saved = probs_cat if save_type == "probs" else logits_cat
         return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None):
+def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None):
 
 
     loss_meter, acc_meter = [AverageMeter()]*2
     all_targets, all_probs = [], []
     auroc = -1
     model.train()
-    for batch_idx, batch in enumerate(loader):
+    for batch_idx, batch in tqdm(enumerate(loader), total = len(loader)):
 
         #gaze_attribute here is tthe heatmap
         inputs, targets, gaze_attributes = batch
@@ -225,6 +250,8 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
+            if gaze_task in ["actdiff", 'actdiff_gaze']:
+                gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
         output = model(inputs)
 
@@ -271,8 +298,21 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                         cum_losses[i] += cam_weight * torch.nn.functional.mse_loss(eye_hm_norm,cam_normalized,reduction='sum')
             a_loss = cum_losses.sum()
 
-
-        loss = c_loss + a_loss
+        
+        
+        actdiff_loss = 0
+        if args.actdiff_lambda:
+            batch_size = len(targets)
+            cum_activation_losses = logits.new_zeros(batch_size)
+            for i in range(batch_size):
+                image = inputs[i,...].unsqueeze(0)
+                masked_image = gaze_attributes[i,...].unsqueeze(0)
+                regular_activations = get_model_activations(image, model)
+                masked_activations = get_model_activations(masked_image, model)
+                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations)
+            actdiff_loss = cum_activation_losses.sum()
+        
+        loss = c_loss + a_loss + actdiff_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -331,7 +371,8 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             use_cuda=use_cuda,
             cam_weight=args.cam_weight,
             cam_convex_alpha=args.cam_convex_alpha,
-            gaze_task=args.gaze_task
+            gaze_task=args.gaze_task,
+            args = args 
         )
 
         val_loss, val_acc, val_auroc, _, _= evaluate(
@@ -372,9 +413,9 @@ def main():
     #load in data loader
 
     if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type)
+        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     if args.gaze_task is not None:
         print(f"Running a gaze experiment: {args.gaze_task}")
@@ -385,19 +426,19 @@ def main():
     if args.checkpoint_dir is None:
 
 
-        model = models.resnet50(pretrained=True)
+        model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
         model.cuda()
 
 
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
         params_to_update = model.parameters()
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed {args.seed}")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff gazemap size: {args.actdiff_gazemap_size}")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)
@@ -413,16 +454,20 @@ def main():
 
             os.makedirs(save_path, exist_ok=True)
 
-            torch.save(model.state_dict(), save_path + "/model.pt")
+            torch.save(best_model.state_dict(), save_path + "/model.pt")
             print(f"Saved Best Model to {save_path}")
         
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+        if not args.subclass_eval:
+            val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
         else:
             print(f"Best Test Auroc {test_auroc}")
 
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
+        if not args.subclass_eval:
+            val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
 
@@ -430,17 +475,26 @@ def main():
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
-            min_auc = min(save_dict['test_auroc'].values())
-            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "robust_auroc": save_dict['test_auroc']["robust_auroc"]}
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set/ood_shift_{args.ood_shift}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
+        if not args.subclass_eval:
+            os.makedirs(val_save_res, exist_ok=True)
+            val_save_res = val_save_res + "/results.json"
+
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
+
+        if not args.subclass_eval:
+            with open(val_save_res, 'w') as fp:
+                json.dump(val_save_dict, fp)
 
 
     else:
@@ -450,35 +504,49 @@ def main():
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
         model.load_state_dict(torch.load(args.checkpoint_dir))
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
         print(f"evaluating on {args.test_set}:")
         test_loss, test_acc, test_auroc, _, _ = evaluate(model, loaders['test'], args, loss_fn=nn.CrossEntropyLoss())
+        if not args.subclass_eval:
+            val_loss, val_acc, val_auroc, _, _ = evaluate(model, loaders['val'], args, loss_fn=nn.CrossEntropyLoss())
 
         if args.subclass_eval:
             print(f"Best Test Acc {test_acc}")
         else:
             print(f"Best Test Auroc {test_auroc}")
         save_dict = {"test_loss": test_loss, "test_acc": test_acc, "test_auroc": test_auroc}
-        
+
+        if not args.subclass_eval:
+            val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
+
         #save results 
 
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
             min_acc = min(save_dict['test_acc'].values())
-            min_auc = min(save_dict['test_auroc'].values())
-            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "test_auroc": min_auc}
+            save_dict = {"test_loss": max_loss, "test_acc": min_acc, "robust_auroc": save_dict['test_auroc']["robust_auroc"]}
+
         elif args.ood_shift is not None:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/ood_shift_{args.ood_shift}/seed_{args.seed}"
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         else:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}/seed_{args.seed}"
-        
+            val_save_res = f"{args.save_dir}/train_set_{args.train_set}/val_set_{args.train_set}/seed_{args.seed}"
         os.makedirs(save_res, exist_ok=True)
         save_res = save_res + "/results.json"
 
+        if not args.subclass_eval:
+            os.makedirs(val_save_res, exist_ok=True)
+            val_save_res = val_save_res + "/results.json"
+
         with open(save_res, 'w') as fp:
             json.dump(save_dict, fp)
+
+        if not args.subclass_eval:
+            with open(val_save_res, 'w') as fp:
+                json.dump(val_save_dict, fp)
 
 if __name__ == "__main__":
     main()

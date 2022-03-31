@@ -11,6 +11,8 @@ import torch
 import pdb
 import sklearn.metrics as skl
 
+import matplotlib.pyplot as plt
+
 def load_file_markers(
     source,
     split_type,
@@ -28,7 +30,7 @@ def load_file_markers(
 
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
-        file_markers_dir = os.path.join(file_dir, "trainval_list.pkl")
+        file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
         
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
@@ -292,7 +294,8 @@ def load_gaze_attribute_labels(source, split_type, task, seed):
     elif task == "heatmap2":
         grid_size = 7 #2 
     else:
-        grid_size = 224
+        gazemap_val = task.split("_")[1]
+        grid_size = int(gazemap_val)
 
  
     heatmaps = make_heatmaps(seqs, grid_size).reshape(-1,grid_size*grid_size)
@@ -316,3 +319,64 @@ def rle2mask(rle, width, height):
         current_position += lengths[index]
 
     return mask.reshape(width, height)
+
+## this will be called in get_item within the dataloader (i.e works on one example)
+def create_masked_image(x, segmentation_mask):
+    """
+    masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
+    to be used in get_item of dataloader 
+    """
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    ### obtain the values contained at the inverse_segmentation_mask indices 
+    assert inverse_segmentation_mask.shape == x.shape
+
+    try:
+        shuffled = x[inverse_segmentation_mask]
+
+        ### shuffle these values
+        shuffled = shuffled[torch.randperm(torch.numel(shuffled))]
+
+        ### append the shuffled values to the original image times the segmentation mask
+        x_masked = x*segmentation_mask
+        x_masked[inverse_segmentation_mask] = shuffled
+    except:
+        import pdb; pdb.set_trace()
+
+    return x_masked
+
+## implement in the batch case first, should 
+def calculate_actdiff_loss(regular_activations, masked_activations):
+    """
+    regular_activtations: list of activations produced by the original image in the model
+    masked_activations: list of activations produced by the masked image in the mdodel
+    """
+
+    assert len(regular_activations) == len(masked_activations)
+
+    two_norm = torch.nn.modules.distance.PairwiseDistance(p=2)
+
+    all_dists = []
+    #L2 Distances between activations 
+    for reg_act, masked_act in zip(regular_activations, masked_activations):
+        all_dists.append(two_norm(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+
+    actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
+
+    return(actdiff_loss)
+
+'''
+def downsample_array():
+
+
+    pass
+
+### puts a 1 in the area where
+def upsample_binary_map(original_map, new_dimensions):
+    np.zeros()
+    pass
+'''

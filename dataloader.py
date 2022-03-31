@@ -10,11 +10,15 @@ import pydicom
 import torchvision
 from skimage.transform import resize
 import math
+from skimage.filters import gaussian
+import torch.nn as nn
 
-from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image
 
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
+
+import matplotlib.pyplot as plt
 
 
 class RoboGazeDataset(Dataset):
@@ -34,7 +38,8 @@ class RoboGazeDataset(Dataset):
         val_scale=0.2,
         seed=0,
         subclass=False,
-        gan = False
+        gan = False,
+        args = None
     ):
 
         """
@@ -50,11 +55,13 @@ class RoboGazeDataset(Dataset):
         if self.source not in ['cxr_a', 'cxr_p']:
             self.ood = True
 
+        self.IMG_SIZE = 224
         self.gan = gan
         self.data_dir = data_dir
         self.split_type = split_type
         self.transform = transform
         self.subclass = subclass
+        self.args = args
         self.file_markers = load_file_markers(
             source,
             split_type,
@@ -69,8 +76,11 @@ class RoboGazeDataset(Dataset):
             type_feature = None
             if self.gaze_task == "data_augment":
                 type_feature = "heatmap1"
+            elif self.gaze_task == "actdiff_gaze":
+                type_feature = f"heatmap_{self.args.actdiff_gazemap_size}"
             else:
                 type_feature = "heatmap2"
+
             gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed)
             self.gaze_features = gaze_attribute_labels_dict
 
@@ -79,6 +89,8 @@ class RoboGazeDataset(Dataset):
             seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
+
+        
 
     def __len__(self):
         return len(self.file_markers)
@@ -160,6 +172,55 @@ class RoboGazeDataset(Dataset):
 
                 return img, label, gaze_attribute_dict
 
+            ### neet to return regular image, label, and masked image
+            if self.gaze_task == "actdiff":
+
+                rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
+                y_true = rle != " -1"
+
+                ### use the segmentation mask
+                if y_true:
+                    # extract segmask
+                    segmask_org = rle2mask(rle, 1024, 1024).T
+
+                    if self.args.actdiff_segmask_size != self.IMG_SIZE:
+
+                        segmask_int = nn.functional.max_pool2d(torch.tensor(segmask_org).unsqueeze(0), int(1024/self.args.actdiff_segmask_size)).squeeze().numpy()
+                        segmask_int = (segmask_int > 0) * 1
+                        segmask = resize(segmask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
+                    else:
+                        segmask = resize(segmask_org, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
+                    segmask = torch.from_numpy(segmask)
+                    segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
+                    img_masked = create_masked_image(img, segmask)
+                    return img, label, img_masked
+
+                ## we don't have a segmentation mask for the image, as in actdiff set segmentation mask to all 1
+                else:
+                    segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
+                    img_masked = create_masked_image(img, segmask)
+                    return img, label, img_masked
+
+            ### need to return regular image, label, and masked image from the gaze heatmap
+            if self.gaze_task == "actdiff_gaze":
+                ### obtain 7 x 7 gaze heatmap
+                gaze_map = gaze_attribute.reshape(self.args.actdiff_gazemap_size,self.args.actdiff_gazemap_size)
+                gaze_map = (gaze_map > self.args.actdiff_gaze_threshold) * 1.0  
+
+                ### resize up to 224 x 224
+                gaze_map = resize(gaze_map, (self.IMG_SIZE,self.IMG_SIZE)) ### change to change_map_size
+                gaze_map = torch.from_numpy(gaze_map)
+                gaze_map = torch.where(gaze_map > 0, torch.ones(gaze_map.shape), torch.zeros(gaze_map.shape)).long()
+                
+                ### get masked image, 
+                img_masked = create_masked_image(img, gaze_map)
+
+                return img, label, img_masked
+
             if self.gaze_task == "segmentation_reg":
             
                 rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
@@ -211,6 +272,51 @@ class GanDataset(Dataset):
 
         return img, int(self.labels[idx]), int(self.gaze_attr[idx])
 
+class SyntheticDataset(Dataset):
+    def __init__(self, split='train', blur=0, train_length=500, val_length=128, test_length=128):
+
+        self.split = split
+
+        if split == 'train':
+            self.length = train_length
+        elif split == "val":
+            self.length = val_length
+        else:
+            self.length = test_length
+
+        self.blur = blur 
+
+        ## load in labels
+        with open(f"./actdiff/data/synth_hard/{split}_labels.pkl", "rb") as f:
+            self.img_labels = pickle.load(f)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        img_path,label = self.img_labels[index]
+
+        img_path = "./actdiff" + img_path[1:]
+        seg_path = img_path.replace("img", "seg")
+
+        image = np.load(img_path)
+        seg = np.load(seg_path)
+
+        # If there is a segmentation, blur it a bit.
+        if (self.blur > 0) and (np.max(seg) != 0):
+            seg = gaussian(seg, self.blur, output=seg)
+            seg /= seg.max()
+
+        seg = (seg > 0) * 1.0
+
+        seg = torch.from_numpy(seg).long()
+        image = torch.from_numpy(image)
+        image = image.unsqueeze(0)
+        image = torch.cat([image, image, image])
+        image = image.float()
+        img_masked = create_masked_image(image, seg)
+        return image, int(label), img_masked
+
 
 def fetch_dataloaders(
     source,
@@ -219,13 +325,14 @@ def fetch_dataloaders(
     seed,
     batch_size,
     num_workers,
-    gaze_task = None, #either none, data augment, cam reg, cam reg convex
+    gaze_task = None, #either none, data augment, cam reg, cam reg convex actdiff
     ood_set = None,
     ood_shift = None,
     subclass = False,
     gan_positive = None,
     gan_negative = None,
-    gan_type = None
+    gan_type = None,
+    args = None
 ):
 
     
@@ -248,7 +355,8 @@ def fetch_dataloaders(
                 transform=transforms[split],
                 val_scale=val_scale,
                 seed=seed,
-                subclass=subclass)
+                subclass=subclass,
+                args=args)
 
 
                 ## get positive and negative class amounts
@@ -339,26 +447,34 @@ def fetch_dataloaders(
                 dataset = torch.utils.data.ConcatDataset([original_dataset, positive_fake_data, negative_fake_data])
 
             else:
-                dataset = RoboGazeDataset(
-                source=source,
-                data_dir=data_dir,
-                split_type=split,
-                gaze_task = gaze_task,
-                transform=transforms[split],
-                val_scale=val_scale,
-                seed=seed,
-                subclass=subclass)
+                if gaze_task == "actdiff" and source == "synth":
+                    dataset = SyntheticDataset(split=split, blur=0.817838)
+                else:
+                    dataset = RoboGazeDataset(
+                    source=source,
+                    data_dir=data_dir,
+                    split_type=split,
+                    gaze_task = gaze_task,
+                    transform=transforms[split],
+                    val_scale=val_scale,
+                    seed=seed,
+                    subclass=subclass,
+                    args=args)
         else:
-            dataset = RoboGazeDataset(
-                source=source,
-                data_dir=data_dir,
-                split_type=split,
-                gaze_task = gaze_task,
-                transform=transforms[split],
-                val_scale=val_scale,
-                seed=seed,
-                subclass=subclass
-            )
+            if gaze_task == "actdiff" and source == "synth":
+                    dataset = SyntheticDataset(split=split, blur=0.817838)
+            else:
+                dataset = RoboGazeDataset(
+                    source=source,
+                    data_dir=data_dir,
+                    split_type=split,
+                    gaze_task = gaze_task,
+                    transform=transforms[split],
+                    val_scale=val_scale,
+                    seed=seed,
+                    subclass=subclass,
+                    args=args
+                )
 
         dataloaders[split] = (
             DataLoader(
@@ -440,7 +556,7 @@ def fetch_entire_dataloader(source,
 
 if __name__ == "__main__":
 
-    dls = fetch_dataloaders("cxr_p","/media",0.2,2,32,4, gaze_task="segmentation_reg")
+    dls = fetch_dataloaders("cxr_p","/media",0.2,2,1,4, gaze_task="actdiff_gaze")
     print(len(dls['train'].dataset))
     print(len(dls['val'].dataset))
     print(len(dls['test'].dataset))
@@ -450,18 +566,22 @@ if __name__ == "__main__":
     #dl = fetch_entire_dataloader("cxr_p","/media",0.2,2,32,4, gaze_task=None, gan = True, label_class=1)
     #print(len(dl.dataset))
     #dataiter = iter(dl)
-    #for i in range(1):
-        #images, labels= dataiter.next()
+
+    dataiter = iter(dls['train'])
+    for i in range(1):
+        images, labels, seg = dataiter.next()
+        #print(images.shape)
+        #print(seg.shape)
         #print(images.shape)
         #grid_img = torchvision.utils.make_grid(images, nrow=8)
         #torchvision.utils.save_image(grid_img, 'downsampled_cxr.png')
 
-    dataiter = iter(dls['train'])
+    #dataiter = iter(dls['train'])
 
-    for i in range(1):
-        images, labels, gaze = dataiter.next()
-        print(len(dls['val'].dataset))
-        print(gaze.shape)
+    #for i in range(1):
+        #images, labels, gaze = dataiter.next()
+        #print(len(dls['val'].dataset))
+        #print(gaze.shape)
         #print(images[0, 0:10, 0:10])
         #print(images[1, 0:10, 0:10])
     
