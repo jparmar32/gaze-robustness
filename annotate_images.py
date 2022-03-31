@@ -5,8 +5,9 @@ import uuid
 
 import gradio as gr
 import numpy as np
-import PIL
-from meerkat import DataPanel, ListColumn, NumpyArrayColumn
+from PIL import Image
+from torchvision import transforms
+import pydicom
 
 POS_FEEDBACK_COLOR = np.array([0, 169, 255])
 NEG_FEEDBACK_COLOR = np.array([255, 64, 64])
@@ -15,35 +16,22 @@ NEG_FEEDBACK_COLOR = np.array([255, 64, 64])
 class FeedbackInterface:
     def __init__(
         self,
-        dp: DataPanel,
-        img_column: str = "img",
-        label_column: str = "label",
-        id_column: str = "image_id",
+        img_ids: list,
+        data_dir: str,
         size: tuple = (224, 224),
-        rank_by: str = None,
-        num_examples: int = 100,
+        num_examples: int = 2,
+        rank_by: list = None,
         save_dir: str = None,
     ):
         """A class representing a Gradio interface for providing feedback on slices.
         Args:
-            dp (DataPanel): the datapanel with examples to provide feedback on
-            img_column (str, optional): The column in dp containing the images. Must
-                materialize to a PIL image.  Defaults to "img".
-            label_column (str, optional): The label of the image, to be displayed
-                alongside the image in the interface. Defaults to "label".
-            id_column (str, optional): A column that uniquely identifies each image in
-                the DataPanel. This is the only information that will be saved alongside
-                the feedback labels and masks. You should pick the column such that a
-                simple `ms.merge` with the original `dp`, will give you the labels
-                alongside the original imags. Defaults to "image_id".
+            img_ids (list, required): A list of strings to the images that would like to be annotated.
+            data_dir (str, required): Folder in which img_ids are stored.
             size (tuple, optional): Images will be reshaped to this size when displayed
                 in gradio. Defaults to (224, 224).
-            rank_by (str, optional): A column in `dp` containing scalar values by which
-                the examples in `dp` should be sorted when . Note only the top
-                `num_examples` will be shown. Defaults to None, in which case the
-                examples are ordered randomly.
             num_examples (int, optional): The number of examples to show in the
-                interface. Defaults to 100.
+                interface. Defaults to 2.
+            rank_by (list, optional): Indices by which to present examples from img_paths.
             save_dir (str, optional): A directory where the feedback will be saved.
                 Defaults to None, in which case a directory named "feedback" will be
                 created and used in the current working directory.
@@ -52,61 +40,67 @@ class FeedbackInterface:
             self.save_dir = save_dir
         else:
             self.save_dir = "feedback"
-        self.save_path = os.path.join(
-            self.save_dir, time.strftime(f"fb_%y-%m-%d_%H-%M_{uuid.uuid1().hex[:6]}.dp")
-        )
-        os.makedirs(self.save_dir, exist_ok=True)
-        print(
-            f"The submitted feedback will be saved as a `DataPanel` at {self.save_path}"
-        )
+
+        self.images_save_dir = os.path.join(self.save_dir, "images")
+        self.annotations_save_dir = os.path.join(self.save_dir, "annotations")
+
+        self.data_dir = data_dir
+        self.img_ids = img_ids
+        self.size = size
+        self.num_examples = num_examples
+        
+        os.makedirs(self.images_save_dir , exist_ok=True)
+        os.makedirs(self.annotations_save_dir , exist_ok=True)
+        print(f"The submitted feedback will be saved at {self.annotations_save_dir}")
 
         # prepare examples
-        if rank_by is not None:
-            example_idxs = (-dp[rank_by]).argsort()[:num_examples]
+        if rank_by:
+            example_idxs = rank_by[:num_examples]
         else:
-            example_idxs = np.random.choice(
-                np.arange(len(dp)), size=num_examples, replace=False
-            )
+            example_idxs = np.random.choice(np.arange(len(self.img_ids)), size=self.num_examples, replace=False)
 
-        self.imgs_dir = "_fb_imgs"
-        os.makedirs(self.imgs_dir, exist_ok=True)
+      
         examples = []
+
+        transform = transforms.Compose([transforms.Resize(size)])
+
         for rank, example_idx in enumerate(example_idxs):
             example_idx = int(example_idx)
-            label = dp[label_column][example_idx]
-            image = dp[img_column][example_idx]
-            image.resize(size)
-            if not isinstance(image, PIL.Image.Image):
-                raise ValueError("`img_column` must materialize to `PIL.Image`")
-            image_path = os.path.join(self.imgs_dir, f"image_{example_idx}.jpg")
+            img_id = self.img_ids[example_idx]
+            img_path = os.path.join(self.data_dir, img_id)
+
+            if img_path[-3:] == "jpg":
+                img = Image.open(img_path)
+            elif img_path[-3:] == "dcm":
+                ds = pydicom.dcmread(img_path)
+                img = ds.pixel_array
+                img = Image.fromarray(np.uint8(img))
+            else:
+                raise ValueError("This image type is not yet supported")
+
+            img_id = img_id[:-4]
+
+            image = transform(img)
+
+            image_path = os.path.join(self.images_save_dir, f"{img_id}.jpg")
             image.save(image_path)
 
             examples.append(
                 [
                     rank,
                     example_idx,
-                    str(label),  # important this is a str, gradio hangs otherwise
+                    img_id,
                     image_path,
-                    dp["feedback_label"][example_idx]
-                    if "feedback_label" in dp
-                    else None,
+                    None,
                 ]
             )
 
-        label_dp = dp[[id_column]].lz[example_idxs]
-        label_dp["feedback_label"] = NumpyArrayColumn(["unlabeled"] * len(example_idxs))
-        label_dp["feedback_mask"] = ListColumn([None] * len(example_idxs))
-
-        self.label_dp = label_dp
-
         # define feedback function
-        def submit_feedback(rank, example_idx, label, img, feedback_label):
+        def submit_feedback(rank, example_idx, img_id, img, feedback_label):
             mask = np.zeros_like(img).astype(int)
             mask[(img == POS_FEEDBACK_COLOR).all(axis=-1)] = 1
             mask[(img == NEG_FEEDBACK_COLOR).all(axis=-1)] = -1
-            self.label_dp["feedback_label"][rank] = feedback_label
-            self.label_dp["feedback_mask"][rank] = mask
-            self.label_dp.write(self.save_path)
+            np.save(os.path.join(self.annotations_save_dir, f"{img_id}_lungmask.npy"), mask)
             return []
 
         iface = gr.Interface(
@@ -126,3 +120,7 @@ class FeedbackInterface:
 
     def __del__(self):
         shutil.rmtree(self.imgs_dir)
+
+
+if __name__ == "__main__":
+    FeedbackInterface(img_ids=['minion.jpg', 'test.jpg'],data_dir='/home/jsparmar/test', num_examples=2)
