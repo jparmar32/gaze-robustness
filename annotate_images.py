@@ -1,7 +1,6 @@
 import os
 import shutil
-import time
-import uuid
+import pickle
 
 import gradio as gr
 import numpy as np
@@ -97,9 +96,19 @@ class FeedbackInterface:
 
         # define feedback function
         def submit_feedback(rank, example_idx, img_id, img, feedback_label):
+
+            '''original_img_path = os.path.join(self.images_save_dir, f"{img_id}.jpg")
+            original_image = np.array(Image.open(original_img_path))
+            mask = img - original_image
+            '''
+
             mask = np.zeros_like(img).astype(int)
             mask[(img == POS_FEEDBACK_COLOR).all(axis=-1)] = 1
             mask[(img == NEG_FEEDBACK_COLOR).all(axis=-1)] = -1
+            mask = np.squeeze(mask[:,:,0])
+            np.save(os.path.join(self.annotations_save_dir, f"{img_id}_lungmask.npy"), mask)
+
+
             np.save(os.path.join(self.annotations_save_dir, f"{img_id}_lungmask.npy"), mask)
             return []
 
@@ -109,7 +118,7 @@ class FeedbackInterface:
                 gr.inputs.Number(),
                 gr.inputs.Number(),
                 gr.inputs.Textbox(),
-                gr.inputs.Image(shape=size),
+                gr.inputs.Image(),
                 gr.inputs.Radio(choices=["positive", "negative", "abstain"]),
             ],
             outputs=[],
@@ -123,4 +132,40 @@ class FeedbackInterface:
 
 
 if __name__ == "__main__":
-    FeedbackInterface(img_ids=['minion.jpg', 'test.jpg'],data_dir='/home/jsparmar/test', num_examples=2)
+
+    
+
+    file_dir = os.path.join("./filemarkers", "cxr_p")
+    file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
+        
+    with open(file_markers_dir, "rb") as fp:
+        file_markers = pickle.load(fp)
+
+    img_ids = [file_marker[0] for file_marker in file_markers]
+    data_dir = os.path.join("/media", "pneumothorax/dicom_images")
+    save_dir = 'lung_segmentations'
+
+    if not os.path.isdir(os.path.join(save_dir,'annotations')):
+        FeedbackInterface(img_ids=file_markers,data_dir=data_dir, num_examples=20, save_dir=save_dir)
+    else:
+        
+        segmented_ids = []
+        for segmentation in os.listdir(os.path.join(save_dir,'annotations')):
+            segmented_ids.append(segmentation[:-1*(len("_lungmask.npy"))])
+
+        rank_by = [i for i in range(len(file_markers))]
+        for segmented_id in segmented_ids:
+            to_rem_idx = file_markers.index(segmented_id)
+            rank_by.remove(to_rem_idx)
+
+        num_examples = min(20, len(rank_by))
+
+        if num_examples != 0:
+            FeedbackInterface(img_ids=file_markers,data_dir=data_dir, num_examples=20, rank_by=rank_by, save_dir=save_dir)
+
+        
+
+   
+
+
+
