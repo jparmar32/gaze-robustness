@@ -75,7 +75,7 @@ class FeedbackInterface:
                 ds = pydicom.dcmread(img_path)
                 img = ds.pixel_array
                 img = Image.fromarray(np.uint8(img))
-                img_id = img_id.split("/")[-1].split(".dcm")[0]
+                img_id = img_id.replace("/","_").split(".dcm")[0]
             else:
                 raise ValueError("This image type is not yet supported")
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
         for segmentation in os.listdir(os.path.join(save_dir,'annotations')):
             segmented_ids.append(segmentation[:-1*(len("_lungmask.npy"))])
 
-        img_truncated_ids = [img_id.split("/")[-1].split(".dcm")[0] for img_id in img_ids]
+        img_truncated_ids = [img_id.replace("/","_").split(".dcm")[0] for img_id in img_ids]
 
         rank_by = [i for i in range(len(file_markers))]
         for segmented_id in segmented_ids:
