@@ -70,15 +70,16 @@ class FeedbackInterface:
 
             if img_path[-3:] == "jpg":
                 img = Image.open(img_path)
+                img_id = img_id[:-4]
             elif img_path[-3:] == "dcm":
                 ds = pydicom.dcmread(img_path)
                 img = ds.pixel_array
                 img = Image.fromarray(np.uint8(img))
+                img_id = img_id.split("/")[-1].split(".dcm")[0]
             else:
                 raise ValueError("This image type is not yet supported")
 
-            img_id = img_id[:-4]
-
+            
             image = transform(img)
 
             image_path = os.path.join(self.images_save_dir, f"{img_id}.jpg")
@@ -146,26 +147,22 @@ if __name__ == "__main__":
     save_dir = 'lung_segmentations'
 
     if not os.path.isdir(os.path.join(save_dir,'annotations')):
-        FeedbackInterface(img_ids=file_markers,data_dir=data_dir, num_examples=20, save_dir=save_dir)
+        FeedbackInterface(img_ids=img_ids,data_dir=data_dir, num_examples=20, save_dir=save_dir)
     else:
         
         segmented_ids = []
         for segmentation in os.listdir(os.path.join(save_dir,'annotations')):
             segmented_ids.append(segmentation[:-1*(len("_lungmask.npy"))])
 
+        img_truncated_ids = [img_id.split("/")[-1].split(".dcm")[0] for img_id in img_ids]
+
         rank_by = [i for i in range(len(file_markers))]
         for segmented_id in segmented_ids:
-            to_rem_idx = file_markers.index(segmented_id)
+            to_rem_idx = img_truncated_ids.index(segmented_id)
             rank_by.remove(to_rem_idx)
 
         num_examples = min(20, len(rank_by))
 
         if num_examples != 0:
-            FeedbackInterface(img_ids=file_markers,data_dir=data_dir, num_examples=20, rank_by=rank_by, save_dir=save_dir)
-
-        
-
-   
-
-
+            FeedbackInterface(img_ids=img_ids,data_dir=data_dir, num_examples=20, rank_by=rank_by, save_dir=save_dir)
 
