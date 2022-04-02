@@ -221,6 +221,27 @@ class RoboGazeDataset(Dataset):
 
                 return img, label, img_masked
 
+             ### neet to return regular image, label, and masked image
+            if self.gaze_task == "actdiff_lungmask":
+
+                ## we have lungmasks for these right now
+                if label == 1:
+
+                    img_name = img_id.replace("/","_").split(".dcm")[0]
+                    lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+
+                    lung_mask = torch.from_numpy(lung_mask)
+                    lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+                    img_masked = create_masked_image(img, lung_mask)
+                    return img, label, img_masked
+
+                ## we don't have lungmasks for these right now
+                else:
+                    segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
+                    img_masked = create_masked_image(img, segmask)
+                    return img, label, img_masked
+
+
             if self.gaze_task == "segmentation_reg":
             
                 rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]

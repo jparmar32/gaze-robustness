@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', 'actdiff_lungmask', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
@@ -250,7 +250,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
-            if gaze_task in ["actdiff", 'actdiff_gaze']:
+            if gaze_task in ["actdiff", 'actdiff_gaze', 'actdiff_lungmask']:
                 gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
         output = model(inputs)

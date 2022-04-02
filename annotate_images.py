@@ -142,7 +142,8 @@ if __name__ == "__main__":
     with open(file_markers_dir, "rb") as fp:
         file_markers = pickle.load(fp)
 
-    img_ids = [file_marker[0] for file_marker in file_markers]
+    ### first we will only label the positives
+    img_ids = [file_marker[0] for file_marker in file_markers if file_marker[1] == 1]
     data_dir = os.path.join("/media", "pneumothorax/dicom_images")
     save_dir = 'lung_segmentations'
 
@@ -155,11 +156,14 @@ if __name__ == "__main__":
             segmented_ids.append(segmentation[:-1*(len("_lungmask.npy"))])
 
         img_truncated_ids = [img_id.replace("/","_").split(".dcm")[0] for img_id in img_ids]
+        
 
-        rank_by = [i for i in range(len(file_markers))]
+        rank_by = [i for i in range(len(img_ids))]
+
         for segmented_id in segmented_ids:
             to_rem_idx = img_truncated_ids.index(segmented_id)
             rank_by.remove(to_rem_idx)
+
 
         num_examples = min(20, len(rank_by))
 
