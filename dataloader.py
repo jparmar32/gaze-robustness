@@ -229,13 +229,22 @@ class RoboGazeDataset(Dataset):
 
                     img_name = img_id.replace("/","_").split(".dcm")[0]
                     lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                    lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
+
+                    if self.args.actdiff_lungmask_size != self.IMG_SIZE:
+                    
+                        lung_mask_int = nn.functional.max_pool2d(torch.tensor(lung_mask).unsqueeze(0), int(224/self.args.actdiff_lungmask_size)).squeeze().numpy()
+                        lung_mask_int = (lung_mask_int > 0) * 1
+                        lung_mask = resize(lung_mask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        lung_mask = (lung_mask > 0) * 1
 
                     lung_mask = torch.from_numpy(lung_mask)
                     lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+
                     img_masked = create_masked_image(img, lung_mask)
                     return img, label, img_masked
 
-                ## we don't have lungmasks for these right now
+                ## we don't have lungmasks for these right now but once all are labeled this will change
                 else:
                     segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
                     img_masked = create_masked_image(img, segmask)
