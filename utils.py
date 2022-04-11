@@ -350,7 +350,7 @@ def create_masked_image(x, segmentation_mask):
     return x_masked
 
 ## implement in the batch case first, should 
-def calculate_actdiff_loss(regular_activations, masked_activations):
+def calculate_actdiff_loss(regular_activations, masked_activations, similarity_metric="l2"):
     """
     regular_activtations: list of activations produced by the original image in the model
     masked_activations: list of activations produced by the masked image in the mdodel
@@ -358,25 +358,17 @@ def calculate_actdiff_loss(regular_activations, masked_activations):
 
     assert len(regular_activations) == len(masked_activations)
 
-    two_norm = torch.nn.modules.distance.PairwiseDistance(p=2)
+    if similarity_metric == "l2":
+        metric = torch.nn.modules.distance.PairwiseDistance(p=2)
+    elif similarity_metric == "cosine":
+        metric = torch.nn.CosineSimilarity(dim=0)
 
     all_dists = []
     #L2 Distances between activations 
     for reg_act, masked_act in zip(regular_activations, masked_activations):
-        all_dists.append(two_norm(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+        all_dists.append(metric(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+        
 
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
 
     return(actdiff_loss)
-
-'''
-def downsample_array():
-
-
-    pass
-
-### puts a 1 in the area where
-def upsample_binary_map(original_map, new_dimensions):
-    np.zeros()
-    pass
-'''

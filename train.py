@@ -58,6 +58,7 @@ def parse_args():
     parser.add_argument("--actdiff_segmask_size", type=int, default=224, help="Segmentation Mask Resolution to Use")
     parser.add_argument("--actdiff_gazemap_size", type=int, default=7, help="Gaze Heatmap Resolution to Use")
     parser.add_argument("--actdiff_lungmask_size", type=int, default=224, help="Lungmask Resolution to Use")
+    parser.add_argument("--actdiff_similarity_type", type=str, default="l2", help="Type of similarity metric to use between embeddings of masked and regular images")
 
     args = parser.parse_args()
     return args
@@ -310,10 +311,13 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_image = gaze_attributes[i,...].unsqueeze(0)
                 regular_activations = get_model_activations(image, model)
                 masked_activations = get_model_activations(masked_image, model)
-                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations)
+                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations, args.actdiff_similarity_type)
             actdiff_loss = cum_activation_losses.sum()
         
-        loss = c_loss + a_loss + actdiff_loss
+        if args.actdiff_similarity_type == "l2":
+            loss = c_loss + a_loss + actdiff_loss
+        elif args.actdiff_similarity_type == "cosine":
+            loss = c_loss + a_loss - actdiff_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -522,7 +526,6 @@ def main():
             val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
-
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())
