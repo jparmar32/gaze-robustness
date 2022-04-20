@@ -13,7 +13,7 @@ import math
 from skimage.filters import gaussian
 import torch.nn as nn
 
-from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image, create_masked_image_advanced_augmentations
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image, create_masked_image_advanced_augmentations, get_masked_normalization
 
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
@@ -71,6 +71,8 @@ class RoboGazeDataset(Dataset):
             subclass=self.subclass
         )
 
+        self.seed = seed
+
         if self.split_type in ['train', 'val']:
 
             type_feature = None
@@ -90,6 +92,9 @@ class RoboGazeDataset(Dataset):
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
 
+        #naive method currently
+        if self.gaze_task[:7] == "actdiff":
+            self.masked_normalization_values = get_masked_normalization(self.args)
         
 
     def __len__(self):
@@ -242,13 +247,12 @@ class RoboGazeDataset(Dataset):
                         lung_mask = torch.from_numpy(lung_mask)
                         lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
 
-                        img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type)
+                        img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values)
                         return img, label, img_masked
 
-                    ## we don't have lungmasks for these right now but once all are labeled this will change
                     else:
                         segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
-                        img_masked = create_masked_image_advanced_augmentations(img, segmask, augmentation=self.args.actdiff_augmentation_type)
+                        img_masked = create_masked_image_advanced_augmentations(img, segmask, augmentation='normal', masked_normalization_vals=self.masked_normalization_values)
                         return img, label, img_masked
 
                 elif self.args.actdiff_segmentation_classes == 'all':
@@ -266,7 +270,7 @@ class RoboGazeDataset(Dataset):
                     lung_mask = torch.from_numpy(lung_mask)
                     lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
 
-                    img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type)
+                    img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values)
                     return img, label, img_masked
 
 

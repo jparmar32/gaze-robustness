@@ -81,7 +81,7 @@ def load_file_markers(
 
 norm_stats = {
     "imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    "cxr": ([0.48865], [0.24621]),
+    "cxr": ([0.48865], [0.24621]), #potential new values: [0.4889199], [0.2476612]
 }
 
 
@@ -353,12 +353,13 @@ def create_masked_image(x, segmentation_mask):
     return x_masked
 
 ## this will be called in get_item within the dataloader (i.e works on one example)
-def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentation="normal"):
+def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentation="normal", masked_normalization_vals=None, seed=15):
     """
     masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
     to be used in get_item of dataloader 
     """
 
+    torch.manual_seed(seed)
     inverse_segmentation_mask = 1 - segmentation_mask
     inverse_segmentation_mask = inverse_segmentation_mask.bool()
     inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
@@ -385,15 +386,19 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
         var =  0.5
 
         ### different across slices
-        noise = torch.randn_like(x)*np.sqrt(var) + mean
+        #noise = torch.randn_like(x)*np.sqrt(var) + mean
 
         ### same across slices
-        # noise = torch.randn((x.shape[1], x.shape[2]))*np.sqrt(var) + mean
-        # noise = noise.unsqueeze(0)
-        # noise = torch.cat([noise, noise, noise])
+        noise = torch.randn((x.shape[1], x.shape[2]))*np.sqrt(var) + mean
+        noise = noise.unsqueeze(0)
+        noise = torch.cat([noise, noise, noise])
 
         background = x + noise 
         x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
 
     elif augmentation == 'gaussian_blur':
 
@@ -401,13 +406,18 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
         gaussian_blur = transforms.GaussianBlur(kernel_size=15, sigma=15)
 
         ### different across slices
-        background = gaussian_blur(x)
+        #background = gaussian_blur(x)
 
         ### same across slices
-        # background = gaussian_blur(x[0,:,:])
-        # background = torch.cat([background, background, background])
+        first_channel_x = x[0,:,:]
+        first_channel_x = first_channel_x.unsqueeze(0)
+        background = gaussian_blur(first_channel_x)
+        background = torch.cat([background, background, background])
 
         x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
 
 
     elif augmentation == 'color_jitter':
@@ -416,12 +426,18 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
         background = jitter(x)
         x_masked = x*segmentation_mask + background*inverse_segmentation_mask
 
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
     ### To depricate
     elif augmentation == 'color_gamma':
         
         x_copy = x.detach().clone()
         background = transforms.functional.adjust_gamma(x_copy,0.7)
         x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
         
 
     elif augmentation == 'sobel_horizontal':
@@ -442,6 +458,9 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
         sobelx_img = sobelx_img.float()
 
         x_masked = x*segmentation_mask + sobelx_img*inverse_segmentation_mask
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
 
     elif augmentation == 'sobel_magnitude':
 
@@ -468,6 +487,8 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
         sobel_mag_img = sobel_mag_img.float()
 
         x_masked = x*segmentation_mask + sobel_mag_img*inverse_segmentation_mask
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
 
     return x_masked
 
@@ -494,3 +515,25 @@ def calculate_actdiff_loss(regular_activations, masked_activations, similarity_m
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
 
     return(actdiff_loss)
+
+## currently this is naive as these values are calculated from actdiff_lungmask at the 224x224 resolution and will
+## not be correct for other segmentations/resolutions. Hence, we should consider a shift in how this is calculated
+def get_masked_normalization(args):
+    
+    if args.actdiff_augmentation_type == "gaussian_noise":
+        return {'mean': -0.002397208008915186, 'std': np.sqrt(1.4651013612747192)}
+
+    elif args.actdiff_augmentation_type == "gaussian_blur":
+        return {'mean': 0.005687213037163019, 'std': np.sqrt(0.9313074946403503)}
+ 
+    elif args.actdiff_augmentation_type == "color_jitter":
+        return {'mean': 0.2101794332265854, 'std': np.sqrt(0.10437733680009842)}
+
+    elif args.actdiff_augmentation_type == "sobel_horizontal":
+        return {'mean': 2767.83740234375, 'std': np.sqrt(223935873024.0)}
+
+    elif args.actdiff_augmentation_type == "sobel_magnitude":
+        return {'mean': 377082.25, 'std': np.sqrt(245810937856.0)}
+
+    else:
+        return None 
