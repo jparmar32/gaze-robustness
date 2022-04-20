@@ -472,7 +472,7 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type}")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type} and actdiff lambda: {args.actdiff_lambda} and augmentation_type: {args.actdiff_augmentation_type} and segmentation classes: {args.actdiff_segmentation_classes} ")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)
