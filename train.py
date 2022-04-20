@@ -21,6 +21,7 @@ from torchvision import datasets, models, transforms
 import copy
 from dataloader import fetch_dataloaders
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
 from models.extract_CAM import get_CAM_from_img
@@ -240,7 +241,7 @@ def evaluate(
         saved = probs_cat if save_type == "probs" else logits_cat
         return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None):
+def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None, writer = None, global_step = None):
 
 
     loss_meter, acc_meter = [AverageMeter()]*2
@@ -316,6 +317,12 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_activations = get_model_activations(masked_image, model)
                 cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations, args.actdiff_similarity_type)
             actdiff_loss = cum_activation_losses.sum()
+
+        ## writer log losses
+        if global_step % 2 == 0:
+            writer.add_scalar(f"train/ce_loss", c_loss, global_step)
+            writer.add_scalar(f"train/actdiff_loss", actdiff_loss, global_step)
+
         
         if args.actdiff_similarity_type == "l2":
             loss = c_loss + a_loss + actdiff_loss
@@ -337,15 +344,23 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         probs_cat = torch.cat(all_probs).numpy()
         auroc = compute_roc_auc(targets_cat, probs_cat)
 
-    return loss_meter.avg, acc_meter.avg, auroc
+        ## writer log acc, auroc
+        if global_step % 2 == 0:
+            writer.add_scalar(f"train/acc", acc, global_step)
+            writer.add_scalar(f"train/auroc", auroc, global_step)
 
-def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
+        global_step += 1
+
+    return loss_meter.avg, acc_meter.avg, auroc, global_step
+
+def train(model, optimizer, scheduler, loaders, args, use_cuda=True, writer=None):
     loss_fn = nn.CrossEntropyLoss()
 
     ### implement metric choice
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    global_step = 0
     metrics = {
         "train_loss": [],
         "val_loss": [],
@@ -371,7 +386,8 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             f'\nEpoch: [{epoch+1} | {args.epochs}]; LRs: {", ".join([f"{lr:.2E}" for lr in cur_lrs])}'
         )
 
-        train_loss, train_acc, train_auroc = train_epoch(
+        ## writer log train metrics in here
+        train_loss, train_acc, train_auroc, global_step = train_epoch(
             model,
             loaders["train"],
             optimizer,
@@ -380,7 +396,9 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             cam_weight=args.cam_weight,
             cam_convex_alpha=args.cam_convex_alpha,
             gaze_task=args.gaze_task,
-            args = args 
+            args = args,
+            writer = writer,
+            global_step = global_step
         )
 
         val_loss, val_acc, val_auroc, _, _= evaluate(
@@ -397,6 +415,12 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
         metrics['val_loss'].append(val_loss)
         metrics['val_acc'].append(val_acc)
         metrics['val_auroc'].append(val_auroc)
+
+        ##writer log val metrics
+
+        writer.add_scalar(f"val/loss", val_loss, epoch)
+        writer.add_scalar(f"val/acc", val_acc, epoch)
+        writer.add_scalar(f"val/auroc", val_auroc, epoch)
 
 
         if val_acc >= best_acc:
@@ -433,6 +457,8 @@ def main():
 
     if args.checkpoint_dir is None:
 
+        writer = SummaryWriter(os.path.join(args.save_dir, f'train_set_{args.train_set}') )
+
 
         model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features
@@ -451,8 +477,8 @@ def main():
         
         scheduler = build_scheduler(args, optimizer)
 
-        best_model, val_acc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
-
+        best_model, val_acc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True, writer=writer)
+        writer.close()
 
         #save model 
 

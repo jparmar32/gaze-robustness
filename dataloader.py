@@ -94,7 +94,8 @@ class RoboGazeDataset(Dataset):
 
         #naive method currently
         if self.gaze_task[:7] == "actdiff":
-            self.masked_normalization_values = get_masked_normalization(self.args)
+            #self.masked_normalization_values = get_masked_normalization(self.args.actdiff_augmentation_type)
+            self.masked_normalization_values = get_masked_normalization('standard')
         
 
     def __len__(self):
@@ -247,12 +248,12 @@ class RoboGazeDataset(Dataset):
                         lung_mask = torch.from_numpy(lung_mask)
                         lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
 
-                        img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values)
+                        img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
                         return img, label, img_masked
 
                     else:
                         segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
-                        img_masked = create_masked_image_advanced_augmentations(img, segmask, augmentation='normal', masked_normalization_vals=self.masked_normalization_values)
+                        img_masked = create_masked_image_advanced_augmentations(img, segmask, augmentation='normal', masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
                         return img, label, img_masked
 
                 elif self.args.actdiff_segmentation_classes == 'all':
@@ -270,7 +271,7 @@ class RoboGazeDataset(Dataset):
                     lung_mask = torch.from_numpy(lung_mask)
                     lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
 
-                    img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values)
+                    img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
                     return img, label, img_masked
 
 

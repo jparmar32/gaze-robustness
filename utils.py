@@ -358,7 +358,7 @@ def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentatio
     masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
     to be used in get_item of dataloader 
     """
-
+   
     torch.manual_seed(seed)
     inverse_segmentation_mask = 1 - segmentation_mask
     inverse_segmentation_mask = inverse_segmentation_mask.bool()
@@ -518,22 +518,25 @@ def calculate_actdiff_loss(regular_activations, masked_activations, similarity_m
 
 ## currently this is naive as these values are calculated from actdiff_lungmask at the 224x224 resolution and will
 ## not be correct for other segmentations/resolutions. Hence, we should consider a shift in how this is calculated
-def get_masked_normalization(args):
+def get_masked_normalization(augmentation_type):
     
-    if args.actdiff_augmentation_type == "gaussian_noise":
+    if augmentation_type == "gaussian_noise":
         return {'mean': -0.002397208008915186, 'std': np.sqrt(1.4651013612747192)}
 
-    elif args.actdiff_augmentation_type == "gaussian_blur":
+    elif augmentation_type == "gaussian_blur":
         return {'mean': 0.005687213037163019, 'std': np.sqrt(0.9313074946403503)}
  
-    elif args.actdiff_augmentation_type == "color_jitter":
+    elif augmentation_type == "color_jitter":
         return {'mean': 0.2101794332265854, 'std': np.sqrt(0.10437733680009842)}
 
-    elif args.actdiff_augmentation_type == "sobel_horizontal":
+    elif augmentation_type == "sobel_horizontal":
         return {'mean': 2767.83740234375, 'std': np.sqrt(223935873024.0)}
 
-    elif args.actdiff_augmentation_type == "sobel_magnitude":
+    elif augmentation_type == "sobel_magnitude":
         return {'mean': 377082.25, 'std': np.sqrt(245810937856.0)}
+
+    elif augmentation_type == "standard":
+        return {'mean': 0.48865, 'std': 0.24621}
 
     else:
         return None 
