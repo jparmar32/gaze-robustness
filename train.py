@@ -59,6 +59,9 @@ def parse_args():
     parser.add_argument("--actdiff_gazemap_size", type=int, default=7, help="Gaze Heatmap Resolution to Use")
     parser.add_argument("--actdiff_lungmask_size", type=int, default=224, help="Lungmask Resolution to Use")
     parser.add_argument("--actdiff_similarity_type", type=str, default="l2", help="Type of similarity metric to use between embeddings of masked and regular images")
+    parser.add_argument("--actdiff_augmentation_type", type=str, choices=['normal', 'gaussian_noise', 'gaussian_blur', 'color_jitter', 'color_gamma', 'sobel_horizontal', 'sobel_magnitude' ], default='normal', help="Type of augmentation to use on the masked images")
+    parser.add_argument("--actdiff_segmentation_classes", type=str, choices=['all', 'positive'], default='positive', help="Which classes to use for the segmentations in ActDiff")
+
 
     args = parser.parse_args()
     return args
@@ -443,7 +446,7 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size}")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type}")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)

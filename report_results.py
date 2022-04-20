@@ -4,28 +4,28 @@ import os
 
 
 train_set = 'cxr_p'
-test_set = 'chestxray8'
-ood_shift = "age" #'age'
+test_set = 'cxr_p'
+ood_shift = None
 val = False
-metric = 'test_auroc'
-subclass_eval = False
-gaze_task = "actdiff"
+metric = 'robust_auroc'
+subclass_eval = True
+gaze_task = "actdiff_lungmask"
 tuning_eval = False
-seg_size = 224
-results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/seg_size_{seg_size}/train_set_{train_set}/test_set_{test_set}'
+lungmask_size = 56
+results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/test_set_{test_set}'
 use_top_seeds = False
 if ood_shift is not None:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/seg_size_{seg_size}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if val:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/threshold_0/gazemap_size_{seg_size}/train_set_{train_set}/val_set_{test_set}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/val_set_{test_set}_masked'
     metric = 'val_auroc'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
 
 if tuning_eval:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/val_set_{test_set}'
+    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/val_set_{test_set}'
     metric = 'val_auroc'
     
 
@@ -102,7 +102,6 @@ for cv in seeds:
     with open(res_file) as data_file:
         results = json.load(data_file)
         means.append(results[metric])
-
 
 print(f"\nMean Auroc: {np.mean(means):.3f}")
 print(f"\nStd: {np.std(means):.3f}")
