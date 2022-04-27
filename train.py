@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("--checkpoint_dir", type=str, default=None, help="Whether to use a given saved model")
     parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--machine", type=str, default="meteor", help="Machine code is being run on for retrieval of data and splits")
 
     parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p', 'synth'], required=True, help="Set to train on")
     parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8', 'synth'], required=True, help="Test set to evaluate on")
@@ -62,6 +63,7 @@ def parse_args():
     parser.add_argument("--actdiff_similarity_type", type=str, default="l2", help="Type of similarity metric to use between embeddings of masked and regular images")
     parser.add_argument("--actdiff_augmentation_type", type=str, choices=['normal', 'gaussian_noise', 'gaussian_blur', 'color_jitter', 'color_gamma', 'sobel_horizontal', 'sobel_magnitude' ], default='normal', help="Type of augmentation to use on the masked images")
     parser.add_argument("--actdiff_segmentation_classes", type=str, choices=['all', 'positive'], default='positive', help="Which classes to use for the segmentations in ActDiff")
+    parser.add_argument("--actdiff_features", type=str, choices=['all', 'last'], default='all', help="What features to regularize in ActDiff")
 
 
     args = parser.parse_args()
@@ -315,6 +317,11 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_image = gaze_attributes[i,...].unsqueeze(0)
                 regular_activations = get_model_activations(image, model)
                 masked_activations = get_model_activations(masked_image, model)
+
+                if args.actdiff_features == "last":
+                    regular_activations = regular_activtations[-1]
+                    masked_activations = masked_activations[-1]
+
                 cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations, args.actdiff_similarity_type)
             actdiff_loss = cum_activation_losses.sum()
 
@@ -444,10 +451,20 @@ def main():
 
     #load in data loader
 
-    if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+    if args.machine == "meteor":
+        data_dir = "/media"
+
+    elif args.machine == "gemini":
+        data_dir = "/media/4tb_hdd/CXR_observational"
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+        raise ValueError("Machine not known")
+
+
+
+    if args.ood_shift is not None:
+        loaders = fetch_dataloaders(args.train_set,data_dir,0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+    else:
+        loaders = fetch_dataloaders(args.train_set,data_dir,0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     if args.gaze_task is not None:
         print(f"Running a gaze experiment: {args.gaze_task}")
@@ -458,7 +475,6 @@ def main():
     if args.checkpoint_dir is None:
 
         writer = SummaryWriter(os.path.join(args.save_dir, f'train_set_{args.train_set}') )
-
 
         model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features

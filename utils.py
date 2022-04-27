@@ -503,16 +503,20 @@ def calculate_actdiff_loss(regular_activations, masked_activations, similarity_m
 
     if similarity_metric == "l2":
         metric = torch.nn.modules.distance.PairwiseDistance(p=2)
+        all_dists = []
+        for reg_act, masked_act in zip(regular_activations, masked_activations):
+            all_dists.append(metric(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+            
     elif similarity_metric == "cosine":
         metric = torch.nn.CosineSimilarity(dim=0)
+        all_dists = []
+        for reg_act, masked_act in zip(regular_activations, masked_activations):
+            all_dists.append(metric(reg_act.flatten(), masked_act.flatten()))
+            
 
-    all_dists = []
-    #L2 Distances between activations 
-    for reg_act, masked_act in zip(regular_activations, masked_activations):
-        all_dists.append(metric(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
-        
-
+    #print(torch.hstack(all_dists))
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
+    print(actdiff_loss)
 
     return(actdiff_loss)
 

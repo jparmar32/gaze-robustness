@@ -88,7 +88,13 @@ class RoboGazeDataset(Dataset):
 
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
 
-            seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
+            if self.args.machine == "meteor":
+                seg_dict_path = "/media/pneumothorax/rle_dict.pkl"
+            elif self.args.machine == "gemini":
+                seg_dict_pth = "/media/4tb_hdd/CXR_observational/pneumothorax/rle_dict.pkl"
+            else:
+                raise ValueError("Machine type not known")
+
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
 
@@ -121,7 +127,15 @@ class RoboGazeDataset(Dataset):
         elif self.source == "cxr_p":
             img_pth = os.path.join(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
 
-            with open('/media/pneumothorax/cxr_tube_dict.pkl', 'rb') as f:          
+
+            if self.args.machine == "meteor":
+                seg_dict_path = '/media/pneumothorax/cxr_tube_dict.pkl'
+            elif self.args.machine == "gemini":
+                tube_path = '/media/nvme_data/jupinder_cxr_robustness_results/cxr_tube_dict.pkl'
+            else:
+                raise ValueError("Machine type not known")
+
+            with open(tube_path, 'rb') as f:          
                 cxr_tube_dict = pickle.load(f)
 
             image_name = img_id.split("/")[-1].split(".dcm")[0]
@@ -397,7 +411,9 @@ def fetch_dataloaders(
 
         if ood_set is not None:
             if split == "test":
-                source = f"{ood_set}/{source}/{ood_shift}"
+
+                source = f"{args.machine}/{ood_set}/{source}/{ood_shift}"
+                #source = f"{ood_set}/{source}/{ood_shift}"
 
         if split == 'train':
             if gan_positive is not None:
