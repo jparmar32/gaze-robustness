@@ -474,7 +474,7 @@ def main():
 
     if args.checkpoint_dir is None:
 
-        writer = SummaryWriter(os.path.join(args.save_dir, f'train_set_{args.train_set}') )
+        writer = SummaryWriter(os.path.join(args.save_dir, f'train_set_{args.train_set}',f'seed_{args.seed}') )
 
         model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features

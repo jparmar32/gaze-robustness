@@ -516,7 +516,6 @@ def calculate_actdiff_loss(regular_activations, masked_activations, similarity_m
 
     #print(torch.hstack(all_dists))
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
-    print(actdiff_loss)
 
     return(actdiff_loss)
 

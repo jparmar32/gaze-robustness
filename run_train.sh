@@ -1,6 +1,6 @@
 #!/bin/sh
 train="cxr_p"
-test="mimic_cxr"
+test="cxr_p"
 
 #for seed in 0 1 2 3 4 #5 6 7 8 9
 #do 
@@ -20,17 +20,17 @@ test="mimic_cxr"
 #   --actdiff_lambda 1.15e-1 
 #done
 
-for seed in 4 #5 6 7 8 9
+for seed in 0 1 2 3 4 5 6 7 8 9
 do 
    for lr in 1e-4 
    do
-       for al in 1e-7 1e-5 1e-3 ## search over 
+       for al in 1e-8 5e-6 1e-5 1e-4 5e-2 1e-1 #1e-7 1e-5 1e-3 ## search over 
        do
-            for lungmask_size in 56 224 ## both 56 and 224
+            for lungmask_size in 56 #224 ## both 56 and 224
             do
-                for augmentation_type in 'gaussian_noise' 'gaussian_blur' 'color_jitter' 'sobel_horizontal' 'sobel_magnitude'
+                for augmentation_type in "normal" #'gaussian_noise' 'gaussian_blur' 'color_jitter' 'sobel_horizontal' 'sobel_magnitude'
                 do
-                   for segmentation_classes in 'all' #'positive' 'all'
+                   for segmentation_classes in 'positive' #'positive' 'all'
                     do
                         python ./train.py \
                         --epochs 100 \
@@ -41,16 +41,15 @@ do
                         --batch_size 16 \
                         --train_set $train \
                         --test_set $test \
-                        --save_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/similarity_type_l2/segmentation_classes_$segmentation_classes/augmentation_type_$augmentation_type/lungmask_size_$lungmask_size/actdiff_lambda_$al" \
+                        --save_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/similarity_type_cosine/segmentation_classes_$segmentation_classes/augmentation_type_$augmentation_type/lungmask_size_$lungmask_size/actdiff_lambda_$al" \
                         --gaze_task "actdiff_lungmask" \
                         --actdiff_lambda $al \
                         --actdiff_lungmask_size $lungmask_size \
-                        --actdiff_similarity_type "l2" \
-                        --checkpoint_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/similarity_type_l2/segmentation_classes_$segmentation_classes/augmentation_type_$augmentation_type/lungmask_size_$lungmask_size/actdiff_lambda_$al/train_set_$train/seed_$seed/model.pt" \
+                        --actdiff_similarity_type "cosine" \
                         --actdiff_augmentation_type $augmentation_type \
                         --actdiff_segmentation_classes $segmentation_classes \
-                        --ood_shift "hospital" \
                         --machine 'gemini' \
+                        --save_model \
                         #--ood_shift "hospital_age" \
                         #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff_lungmask/lungmask_size_$lungmask_size/train_set_$train/seed_$seed/model.pt" \
                         #--save_model \
