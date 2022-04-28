@@ -89,7 +89,7 @@ class RoboGazeDataset(Dataset):
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
 
             if self.args.machine == "meteor":
-                seg_dict_path = "/media/pneumothorax/rle_dict.pkl"
+                seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
             elif self.args.machine == "gemini":
                 seg_dict_pth = "/media/4tb_hdd/CXR_observational/pneumothorax/rle_dict.pkl"
             else:
@@ -129,7 +129,7 @@ class RoboGazeDataset(Dataset):
 
 
             if self.args.machine == "meteor":
-                seg_dict_path = '/media/pneumothorax/cxr_tube_dict.pkl'
+                tube_path = '/media/pneumothorax/cxr_tube_dict.pkl'
             elif self.args.machine == "gemini":
                 tube_path = '/media/nvme_data/jupinder_cxr_robustness_results/cxr_tube_dict.pkl'
             else:
