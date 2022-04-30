@@ -7,12 +7,18 @@ train_set = 'cxr_p'
 test_set = 'cxr_p'
 ood_shift = None
 val = False
-metric = 'robust_auroc'
-subclass_eval = True
+metric = 'test_auroc'
+subclass_eval = False
 gaze_task = "actdiff_lungmask"
 tuning_eval = False
-lungmask_size = 56
-results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/test_set_{test_set}'
+lungmask_size = 224
+segmentation_class = "positive"
+augmentation_type = "color_jitter"
+al = '1e-5'
+
+#/mnt/data/gaze_robustness_results/actdiff_lungmask/segmentation_classes_positive/augmentation_type_gaussian_noise/lungmask_size_56/actdiff_lambda_1e-7/train_set_cxr_p
+
+results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
 use_top_seeds = False
 if ood_shift is not None:
     results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
@@ -32,7 +38,7 @@ if tuning_eval:
 
 #results_dir = f'/mnt/gaze_robustness_results'
 
-seeds = [x for x in range(10)] 
+seeds = [x for x in range(4)] 
 lrs = ["1e-5", "1e-4", "1e-3"]
 wds = ["1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1e-0"]
 
