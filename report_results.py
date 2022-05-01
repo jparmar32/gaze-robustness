@@ -4,41 +4,42 @@ import os
 
 
 train_set = 'cxr_p'
-test_set = 'cxr_p'
-ood_shift = None
+test_set = 'chexpert'
+ood_shift = 'hospital_age'
 val = False
 metric = 'test_auroc'
 subclass_eval = False
 gaze_task = "actdiff_lungmask"
 tuning_eval = False
-lungmask_size = 224
+lungmask_size = 56
 segmentation_class = "positive"
-augmentation_type = "color_jitter"
-al = '1e-5'
+augmentation_type = "normal"
+al = '5e-2'
+machine = 'gemini'
+prepend_path = '/media/nvme_data/jupinder_cxr_robustness_results' if machine == 'gemini' else '/mnt/data/gaze_robustness_results'
 
-#/mnt/data/gaze_robustness_results/actdiff_lungmask/segmentation_classes_positive/augmentation_type_gaussian_noise/lungmask_size_56/actdiff_lambda_1e-7/train_set_cxr_p
-
-results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
+results_dir = f'{prepend_path}/{gaze_task}/similarity_type_cosine/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
 use_top_seeds = False
+
 if ood_shift is not None:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'{prepend_path}/{gaze_task}/similarity_type_cosine/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if val:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/val_set_{test_set}_masked'
+    results_dir = f'{prepend_path}/{gaze_task}/similarity_type_cosine/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/val_set_{test_set}'
     metric = 'val_auroc'
 
 if subclass_eval:
     results_dir = results_dir + "_subclass_evaluation"
 
 if tuning_eval:
-    results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/positive_segmentations/cosine_similarity/lungmask_size_{lungmask_size}/train_set_{train_set}/val_set_{test_set}'
+    results_dir = f'{prepend_path}/{gaze_task}/similarity_type_cosine/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/val_set_{test_set}'
     metric = 'val_auroc'
     
 
 
 #results_dir = f'/mnt/gaze_robustness_results'
 
-seeds = [x for x in range(4)] 
+seeds = [x for x in range(10)] 
 lrs = ["1e-5", "1e-4", "1e-3"]
 wds = ["1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1e-0"]
 
@@ -89,7 +90,7 @@ print(f"best lr: {best_lr} and best wd: {best_wd} with mean auroc: {best_auroc} 
 if use_top_seeds:
     top_seeds = []
     for cv in seeds:
-        val_results_dir = f'/mnt/data/gaze_robustness_results/{gaze_task}/train_set_{train_set}/val_set_{train_set}'
+        val_results_dir = f'{prepend_path}/{gaze_task}/similarity_type_cosine/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/val_set_{train_set}'
         res_file = os.path.join(val_results_dir, f"seed_{cv}/results.json")
         
         with open(res_file) as data_file:
