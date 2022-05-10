@@ -34,6 +34,8 @@ def load_file_markers(
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
         file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
+
+        ### if blah and source
         
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
