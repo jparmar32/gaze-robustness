@@ -13,7 +13,7 @@ import math
 from skimage.filters import gaussian
 import torch.nn as nn
 
-from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image
+from utils import load_file_markers, get_data_transforms, load_gaze_attribute_labels, rle2mask, create_masked_image, create_masked_image_advanced_augmentations, get_masked_normalization
 
 import gan_training.gan.generator as gan_generator
 import gan_training.acgan.generator as acgan_generator
@@ -71,6 +71,8 @@ class RoboGazeDataset(Dataset):
             subclass=self.subclass
         )
 
+        self.seed = seed
+
         if self.split_type in ['train', 'val']:
 
             type_feature = None
@@ -86,10 +88,20 @@ class RoboGazeDataset(Dataset):
 
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
 
-            seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
+            if self.args.machine == "meteor":
+                seg_dict_pth = "/media/pneumothorax/rle_dict.pkl"
+            elif self.args.machine == "gemini":
+                seg_dict_pth = "/media/4tb_hdd/CXR_observational/pneumothorax/rle_dict.pkl"
+            else:
+                raise ValueError("Machine type not known")
+
             with open(seg_dict_pth, "rb") as pkl_f:
                 self.rle_dict = pickle.load(pkl_f)
 
+        #naive method currently
+        if self.gaze_task[:7] == "actdiff":
+            #self.masked_normalization_values = get_masked_normalization(self.args.actdiff_augmentation_type)
+            self.masked_normalization_values = get_masked_normalization('standard')
         
 
     def __len__(self):
@@ -115,7 +127,15 @@ class RoboGazeDataset(Dataset):
         elif self.source == "cxr_p":
             img_pth = os.path.join(self.data_dir, f"pneumothorax/dicom_images/{img_id}")
 
-            with open('/media/pneumothorax/cxr_tube_dict.pkl', 'rb') as f:          
+
+            if self.args.machine == "meteor":
+                tube_path = '/media/pneumothorax/cxr_tube_dict.pkl'
+            elif self.args.machine == "gemini":
+                tube_path = '/media/nvme_data/jupinder_cxr_robustness_results/cxr_tube_dict.pkl'
+            else:
+                raise ValueError("Machine type not known")
+
+            with open(tube_path, 'rb') as f:          
                 cxr_tube_dict = pickle.load(f)
 
             image_name = img_id.split("/")[-1].split(".dcm")[0]
@@ -220,6 +240,54 @@ class RoboGazeDataset(Dataset):
                 img_masked = create_masked_image(img, gaze_map)
 
                 return img, label, img_masked
+
+             ### neet to return regular image, label, and masked image
+            if self.gaze_task == "actdiff_lungmask":
+
+
+                if self.args.actdiff_segmentation_classes == 'positive':
+
+                    ## we have lungmasks for these right now
+                    if label == 1:
+                        img_name = img_id.replace("/","_").split(".dcm")[0]
+                        lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                        lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
+
+                        if self.args.actdiff_lungmask_size != self.IMG_SIZE:
+                            lung_mask_int = nn.functional.max_pool2d(torch.tensor(lung_mask).unsqueeze(0), int(224/self.args.actdiff_lungmask_size)).squeeze().numpy()
+                            lung_mask_int = (lung_mask_int > 0) * 1
+                            lung_mask = resize(lung_mask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                            lung_mask = (lung_mask > 0) * 1
+
+                        lung_mask = torch.from_numpy(lung_mask)
+                        lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+
+                        img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
+                        return img, label, img_masked
+
+                    else:
+                        segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
+                        img_masked = create_masked_image_advanced_augmentations(img, segmask, augmentation='normal', masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
+                        return img, label, img_masked
+
+                elif self.args.actdiff_segmentation_classes == 'all':
+                    
+                    img_name = img_id.replace("/","_").split(".dcm")[0]
+                    lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                    lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
+
+                    if self.args.actdiff_lungmask_size != self.IMG_SIZE:
+                        lung_mask_int = nn.functional.max_pool2d(torch.tensor(lung_mask).unsqueeze(0), int(224/self.args.actdiff_lungmask_size)).squeeze().numpy()
+                        lung_mask_int = (lung_mask_int > 0) * 1
+                        lung_mask = resize(lung_mask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        lung_mask = (lung_mask > 0) * 1
+
+                    lung_mask = torch.from_numpy(lung_mask)
+                    lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+
+                    img_masked = create_masked_image_advanced_augmentations(img, lung_mask, augmentation=self.args.actdiff_augmentation_type, masked_normalization_vals=self.masked_normalization_values, seed=self.seed)
+                    return img, label, img_masked
+
 
             if self.gaze_task == "segmentation_reg":
             
@@ -343,7 +411,9 @@ def fetch_dataloaders(
 
         if ood_set is not None:
             if split == "test":
-                source = f"{ood_set}/{source}/{ood_shift}"
+
+                source = f"{args.machine}/{ood_set}/{source}/{ood_shift}"
+                #source = f"{ood_set}/{source}/{ood_shift}"
 
         if split == 'train':
             if gan_positive is not None:

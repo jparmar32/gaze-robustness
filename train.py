@@ -21,6 +21,7 @@ from torchvision import datasets, models, transforms
 import copy
 from dataloader import fetch_dataloaders
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
 from models.extract_CAM import get_CAM_from_img
@@ -36,6 +37,7 @@ def parse_args():
     parser.add_argument("--checkpoint_dir", type=str, default=None, help="Whether to use a given saved model")
     parser.add_argument("--seed", type=int, default=0, help="Seed to use in dataloader")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--machine", type=str, default="meteor", help="Machine code is being run on for retrieval of data and splits")
 
     parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p', 'synth'], required=True, help="Set to train on")
     parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8', 'synth'], required=True, help="Test set to evaluate on")
@@ -45,7 +47,7 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', 'actdiff_lungmask', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
@@ -57,6 +59,12 @@ def parse_args():
     parser.add_argument("--actdiff_gaze_threshold", type=float, default=0, help="Value to threshold Gaze Heatmaps at")
     parser.add_argument("--actdiff_segmask_size", type=int, default=224, help="Segmentation Mask Resolution to Use")
     parser.add_argument("--actdiff_gazemap_size", type=int, default=7, help="Gaze Heatmap Resolution to Use")
+    parser.add_argument("--actdiff_lungmask_size", type=int, default=224, help="Lungmask Resolution to Use")
+    parser.add_argument("--actdiff_similarity_type", type=str, default="l2", help="Type of similarity metric to use between embeddings of masked and regular images")
+    parser.add_argument("--actdiff_augmentation_type", type=str, choices=['normal', 'gaussian_noise', 'gaussian_blur', 'color_jitter', 'color_gamma', 'sobel_horizontal', 'sobel_magnitude' ], default='normal', help="Type of augmentation to use on the masked images")
+    parser.add_argument("--actdiff_segmentation_classes", type=str, choices=['all', 'positive'], default='positive', help="Which classes to use for the segmentations in ActDiff")
+    parser.add_argument("--actdiff_features", type=str, choices=['all', 'last'], default='all', help="What features to regularize in ActDiff")
+
 
     args = parser.parse_args()
     return args
@@ -235,7 +243,7 @@ def evaluate(
         saved = probs_cat if save_type == "probs" else logits_cat
         return loss_meter.avg, acc_meter.avg, auroc, all_ids, saved
 
-def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None):
+def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cuda=True, cam_weight=0, cam_convex_alpha=0, gaze_task=None, args = None, writer = None, global_step = None):
 
 
     loss_meter, acc_meter = [AverageMeter()]*2
@@ -250,7 +258,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
-            if gaze_task in ["actdiff", 'actdiff_gaze']:
+            if gaze_task in ["actdiff", 'actdiff_gaze', 'actdiff_lungmask']:
                 gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
         output = model(inputs)
@@ -309,10 +317,24 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_image = gaze_attributes[i,...].unsqueeze(0)
                 regular_activations = get_model_activations(image, model)
                 masked_activations = get_model_activations(masked_image, model)
-                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations)
+
+                if args.actdiff_features == "last":
+                    regular_activations = regular_activtations[-1]
+                    masked_activations = masked_activations[-1]
+
+                cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations, args.actdiff_similarity_type)
             actdiff_loss = cum_activation_losses.sum()
+
+        ## writer log losses
+        if global_step % 2 == 0:
+            writer.add_scalar(f"train/ce_loss", c_loss, global_step)
+            writer.add_scalar(f"train/actdiff_loss", actdiff_loss, global_step)
+
         
-        loss = c_loss + a_loss + actdiff_loss
+        if args.actdiff_similarity_type == "l2":
+            loss = c_loss + a_loss + actdiff_loss
+        elif args.actdiff_similarity_type == "cosine":
+            loss = c_loss + a_loss - actdiff_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -329,15 +351,23 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         probs_cat = torch.cat(all_probs).numpy()
         auroc = compute_roc_auc(targets_cat, probs_cat)
 
-    return loss_meter.avg, acc_meter.avg, auroc
+        ## writer log acc, auroc
+        if global_step % 2 == 0:
+            writer.add_scalar(f"train/acc", acc, global_step)
+            writer.add_scalar(f"train/auroc", auroc, global_step)
 
-def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
+        global_step += 1
+
+    return loss_meter.avg, acc_meter.avg, auroc, global_step
+
+def train(model, optimizer, scheduler, loaders, args, use_cuda=True, writer=None):
     loss_fn = nn.CrossEntropyLoss()
 
     ### implement metric choice
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    global_step = 0
     metrics = {
         "train_loss": [],
         "val_loss": [],
@@ -363,7 +393,8 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             f'\nEpoch: [{epoch+1} | {args.epochs}]; LRs: {", ".join([f"{lr:.2E}" for lr in cur_lrs])}'
         )
 
-        train_loss, train_acc, train_auroc = train_epoch(
+        ## writer log train metrics in here
+        train_loss, train_acc, train_auroc, global_step = train_epoch(
             model,
             loaders["train"],
             optimizer,
@@ -372,7 +403,9 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
             cam_weight=args.cam_weight,
             cam_convex_alpha=args.cam_convex_alpha,
             gaze_task=args.gaze_task,
-            args = args 
+            args = args,
+            writer = writer,
+            global_step = global_step
         )
 
         val_loss, val_acc, val_auroc, _, _= evaluate(
@@ -389,6 +422,12 @@ def train(model, optimizer, scheduler, loaders, args, use_cuda=True):
         metrics['val_loss'].append(val_loss)
         metrics['val_acc'].append(val_acc)
         metrics['val_auroc'].append(val_auroc)
+
+        ##writer log val metrics
+
+        writer.add_scalar(f"val/loss", val_loss, epoch)
+        writer.add_scalar(f"val/acc", val_acc, epoch)
+        writer.add_scalar(f"val/auroc", val_auroc, epoch)
 
 
         if val_acc >= best_acc:
@@ -412,10 +451,20 @@ def main():
 
     #load in data loader
 
-    if args.ood_shift is not None:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+    if args.machine == "meteor":
+        data_dir = "/media"
+
+    elif args.machine == "gemini":
+        data_dir = "/media/4tb_hdd/CXR_observational"
     else:
-        loaders = fetch_dataloaders(args.train_set,"/media",0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+        raise ValueError("Machine not known")
+
+
+
+    if args.ood_shift is not None:
+        loaders = fetch_dataloaders(args.train_set,data_dir,0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, ood_set= args.test_set, ood_shift = args.ood_shift, gan_positive = args.gan_positive_model, gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
+    else:
+        loaders = fetch_dataloaders(args.train_set,data_dir,0.2,args.seed,args.batch_size,4, gaze_task=args.gaze_task, subclass=args.subclass_eval, gan_positive = args.gan_positive_model , gan_negative = args.gan_negative_model, gan_type = args.gan_type, args = args)
     #dls = fetch_dataloaders("cxr_p","/media",0.2,0,32,4, ood_set='mimic_cxr', ood_shift='hospital')
     if args.gaze_task is not None:
         print(f"Running a gaze experiment: {args.gaze_task}")
@@ -425,6 +474,7 @@ def main():
 
     if args.checkpoint_dir is None:
 
+        writer = SummaryWriter(os.path.join(args.save_dir, f'train_set_{args.train_set}',f'seed_{args.seed}') )
 
         model = models.resnet50(pretrained=True) ### may have to make own resnet class if this doesn't work
         num_ftrs = model.fc.in_features
@@ -438,13 +488,13 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff gazemap size: {args.actdiff_gazemap_size}")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type} and actdiff lambda: {args.actdiff_lambda} and augmentation_type: {args.actdiff_augmentation_type} and segmentation classes: {args.actdiff_segmentation_classes} ")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)
 
-        best_model, val_acc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True)
-
+        best_model, val_acc, metrics = train(model, optimizer, scheduler,loaders, args, use_cuda=True, writer=writer)
+        writer.close()
 
         #save model 
 
@@ -521,7 +571,6 @@ def main():
             val_save_dict = {"val_loss": val_loss, "val_acc": val_acc, "val_auroc": val_auroc}
 
         #save results 
-
         if args.subclass_eval:
             save_res = f"{args.save_dir}/train_set_{args.train_set}/test_set_{args.test_set}_subclass_evaluation/seed_{args.seed}"
             max_loss = max(save_dict['test_loss'].values())

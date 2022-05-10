@@ -1,3 +1,4 @@
+from operator import inv, le
 import os
 import pickle
 import numpy as np
@@ -10,6 +11,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR as CosineScheduler
 import torch 
 import pdb
 import sklearn.metrics as skl
+import cv2
+import skimage.exposure as exposure
 
 import matplotlib.pyplot as plt
 
@@ -78,7 +81,7 @@ def load_file_markers(
 
 norm_stats = {
     "imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    "cxr": ([0.48865], [0.24621]),
+    "cxr": ([0.48865], [0.24621]), #potential new values: [0.4889199], [0.2476612]
 }
 
 
@@ -349,8 +352,148 @@ def create_masked_image(x, segmentation_mask):
 
     return x_masked
 
+## this will be called in get_item within the dataloader (i.e works on one example)
+def create_masked_image_advanced_augmentations(x, segmentation_mask, augmentation="normal", masked_normalization_vals=None, seed=15):
+    """
+    masked image is defined as: x_masked = x*seg + shuffle(x)*(1 - seg)
+    to be used in get_item of dataloader 
+    """
+   
+    torch.manual_seed(seed)
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    ### obtain the values contained at the inverse_segmentation_mask indices 
+    assert inverse_segmentation_mask.shape == x.shape
+    assert torch.equal(inverse_segmentation_mask + segmentation_mask, torch.ones_like(x).long())
+    
+    if augmentation == 'normal':
+        shuffled = x[inverse_segmentation_mask]
+
+        ### shuffle these values
+        shuffled = shuffled[torch.randperm(torch.numel(shuffled))]
+
+        ### append the shuffled values to the original image times the segmentation mask
+        x_masked = x*segmentation_mask
+        x_masked[inverse_segmentation_mask] = shuffled
+
+    ## For all of these how should I normalize
+    elif augmentation == 'gaussian_noise':
+        
+        mean = 0
+        var =  0.5
+
+        ### different across slices
+        #noise = torch.randn_like(x)*np.sqrt(var) + mean
+
+        ### same across slices
+        noise = torch.randn((x.shape[1], x.shape[2]))*np.sqrt(var) + mean
+        noise = noise.unsqueeze(0)
+        noise = torch.cat([noise, noise, noise])
+
+        background = x + noise 
+        x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
+
+    elif augmentation == 'gaussian_blur':
+
+
+        gaussian_blur = transforms.GaussianBlur(kernel_size=15, sigma=15)
+
+        ### different across slices
+        #background = gaussian_blur(x)
+
+        ### same across slices
+        first_channel_x = x[0,:,:]
+        first_channel_x = first_channel_x.unsqueeze(0)
+        background = gaussian_blur(first_channel_x)
+        background = torch.cat([background, background, background])
+
+        x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
+
+    elif augmentation == 'color_jitter':
+
+        jitter = transforms.ColorJitter(brightness=(0.1,1.1), contrast=(0.1,1.1), saturation=(0.1,1.1), hue=(-0.2,0.2))
+        background = jitter(x)
+        x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
+    ### To depricate
+    elif augmentation == 'color_gamma':
+        
+        x_copy = x.detach().clone()
+        background = transforms.functional.adjust_gamma(x_copy,0.7)
+        x_masked = x*segmentation_mask + background*inverse_segmentation_mask
+
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+        
+
+    elif augmentation == 'sobel_horizontal':
+        
+
+        sobel_x = torch.transpose(x, 0,1)
+        sobel_x = torch.transpose(sobel_x, 1,2)
+        sobel_x = sobel_x.numpy()
+        gray = cv2.cvtColor(sobel_x,cv2.COLOR_RGB2GRAY)
+
+        # apply sobel derivatives
+        sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=13)
+
+        # optionally normalize to range 0 to 255 for proper display
+        sobelx_img = torch.tensor(sobelx)
+        sobelx_img = sobelx_img.unsqueeze(0)
+        sobelx_img = torch.cat([sobelx_img, sobelx_img, sobelx_img])
+        sobelx_img = sobelx_img.float()
+
+        x_masked = x*segmentation_mask + sobelx_img*inverse_segmentation_mask
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
+
+    elif augmentation == 'sobel_magnitude':
+
+        sobel_x = torch.transpose(x, 0,1)
+        sobel_x = torch.transpose(sobel_x, 1,2)
+        sobel_x = sobel_x.numpy()
+
+        gray = cv2.cvtColor(sobel_x,cv2.COLOR_RGB2GRAY)
+
+        # apply sobel derivatives
+        sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=13)
+        sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=13)
+
+        # square 
+        sobelx2 = cv2.multiply(sobelx,sobelx)
+        sobely2 = cv2.multiply(sobely,sobely)
+
+        # add together and take square root
+        sobel_magnitude = cv2.sqrt(sobelx2 + sobely2)
+    
+        sobel_mag_img = torch.tensor(sobel_magnitude)
+        sobel_mag_img = sobel_mag_img.unsqueeze(0)
+        sobel_mag_img = torch.cat([sobel_mag_img, sobel_mag_img, sobel_mag_img])
+        sobel_mag_img = sobel_mag_img.float()
+
+        x_masked = x*segmentation_mask + sobel_mag_img*inverse_segmentation_mask
+        normalize = transforms.Normalize([masked_normalization_vals['mean']]*x_masked.shape[0], [masked_normalization_vals['std']]*x_masked.shape[0])
+        x_masked = normalize(x_masked)
+
+    return x_masked
+
 ## implement in the batch case first, should 
-def calculate_actdiff_loss(regular_activations, masked_activations):
+def calculate_actdiff_loss(regular_activations, masked_activations, similarity_metric="l2"):
     """
     regular_activtations: list of activations produced by the original image in the model
     masked_activations: list of activations produced by the masked image in the mdodel
@@ -358,25 +501,45 @@ def calculate_actdiff_loss(regular_activations, masked_activations):
 
     assert len(regular_activations) == len(masked_activations)
 
-    two_norm = torch.nn.modules.distance.PairwiseDistance(p=2)
+    if similarity_metric == "l2":
+        metric = torch.nn.modules.distance.PairwiseDistance(p=2)
+        all_dists = []
+        for reg_act, masked_act in zip(regular_activations, masked_activations):
+            all_dists.append(metric(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
+            
+    elif similarity_metric == "cosine":
+        metric = torch.nn.CosineSimilarity(dim=0)
+        all_dists = []
+        for reg_act, masked_act in zip(regular_activations, masked_activations):
+            all_dists.append(metric(reg_act.flatten(), masked_act.flatten()))
+            
 
-    all_dists = []
-    #L2 Distances between activations 
-    for reg_act, masked_act in zip(regular_activations, masked_activations):
-        all_dists.append(two_norm(reg_act.flatten().unsqueeze(0), masked_act.flatten().unsqueeze(0)))
-
+    #print(torch.hstack(all_dists))
     actdiff_loss = torch.sum(torch.hstack(all_dists))/len(all_dists)
 
     return(actdiff_loss)
 
-'''
-def downsample_array():
+## currently this is naive as these values are calculated from actdiff_lungmask at the 224x224 resolution and will
+## not be correct for other segmentations/resolutions. Hence, we should consider a shift in how this is calculated
+def get_masked_normalization(augmentation_type):
+    
+    if augmentation_type == "gaussian_noise":
+        return {'mean': -0.002397208008915186, 'std': np.sqrt(1.4651013612747192)}
 
+    elif augmentation_type == "gaussian_blur":
+        return {'mean': 0.005687213037163019, 'std': np.sqrt(0.9313074946403503)}
+ 
+    elif augmentation_type == "color_jitter":
+        return {'mean': 0.2101794332265854, 'std': np.sqrt(0.10437733680009842)}
 
-    pass
+    elif augmentation_type == "sobel_horizontal":
+        return {'mean': 2767.83740234375, 'std': np.sqrt(223935873024.0)}
 
-### puts a 1 in the area where
-def upsample_binary_map(original_map, new_dimensions):
-    np.zeros()
-    pass
-'''
+    elif augmentation_type == "sobel_magnitude":
+        return {'mean': 377082.25, 'std': np.sqrt(245810937856.0)}
+
+    elif augmentation_type == "standard":
+        return {'mean': 0.48865, 'std': 0.24621}
+
+    else:
+        return None 

@@ -4,3 +4,5 @@ __pycache__
 .vscode
 *.npy
 *.json
+*.jpg
+*.pyc
