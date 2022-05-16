@@ -129,7 +129,7 @@ class FeedbackInterface:
         self.interface = iface.launch(inbrowser=False, inline=False)
 
     def __del__(self):
-        shutil.rmtree(self.imgs_dir)
+        shutil.rmtree(self.data_dir)
 
 
 if __name__ == "__main__":
@@ -137,14 +137,14 @@ if __name__ == "__main__":
     
 
     file_dir = os.path.join("./filemarkers", "cxr_p")
-    file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
+    file_markers_dir = os.path.join(file_dir, "new_trainval_all.pkl") #gold
         
     with open(file_markers_dir, "rb") as fp:
         file_markers = pickle.load(fp)
 
     ### label all images
-    img_ids = [file_marker[0] for file_marker in file_markers]
-    data_dir = os.path.join("/media", "pneumothorax/dicom_images")
+    img_ids = [file_marker[0] for file_marker in file_markers if file_marker[1] == 1]
+    data_dir = os.path.join("/media/4tb_hdd/CXR_observational", "pneumothorax/dicom_images")
     save_dir = 'lung_segmentations'
 
     if not os.path.isdir(os.path.join(save_dir,'annotations')):
@@ -159,14 +159,14 @@ if __name__ == "__main__":
         
         
         rank_by = [i for i in range(len(img_ids))]
-
         for segmented_id in segmented_ids:
-            to_rem_idx = img_truncated_ids.index(segmented_id)
-            rank_by.remove(to_rem_idx)
+            if segmented_id in img_truncated_ids:
+                to_rem_idx = img_truncated_ids.index(segmented_id)
+                rank_by.remove(to_rem_idx)
 
         print(f"There are {len(rank_by)} images left to label")
 
-        num_examples = min(250, len(rank_by))
+        num_examples = min(500, len(rank_by))
 
         if num_examples != 0:
             FeedbackInterface(img_ids=img_ids,data_dir=data_dir, num_examples=num_examples, rank_by=rank_by, save_dir=save_dir)

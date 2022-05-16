@@ -41,6 +41,7 @@ def parse_args():
 
     parser.add_argument("--train_set", type=str, choices=['cxr_a','cxr_p', 'synth'], required=True, help="Set to train on")
     parser.add_argument("--test_set", type=str, choices=['cxr_a','cxr_p', 'mimic_cxr', 'chexpert', 'chestxray8', 'synth'], required=True, help="Test set to evaluate on")
+    parser.add_argument("--train_size", type=str, choices=['small', 'all'], default='small', help="Size of training set to train on")
     parser.add_argument("--ood_shift", type=str, choices=['hospital','hospital_age', 'age', None], default=None, help="Distribution shift to experiment with")
 
     parser.add_argument("--save_dir", type=str, default="/mnt/gaze_robustness_results/resnet_only", help="Save Dir")

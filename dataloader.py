@@ -64,6 +64,7 @@ class RoboGazeDataset(Dataset):
         self.args = args
         self.file_markers = load_file_markers(
             source,
+            self.args.train_size,
             split_type,
             self.ood,
             val_scale,
@@ -83,7 +84,7 @@ class RoboGazeDataset(Dataset):
             else:
                 type_feature = "heatmap2"
 
-            gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed)
+            gaze_attribute_labels_dict = load_gaze_attribute_labels(source, self.split_type, type_feature, seed, train_size=self.args.train_size)
             self.gaze_features = gaze_attribute_labels_dict
 
             self.average_heatmap = np.mean(list(self.gaze_features.values()), axis=0).squeeze()
@@ -99,9 +100,10 @@ class RoboGazeDataset(Dataset):
                 self.rle_dict = pickle.load(pkl_f)
 
         #naive method currently
-        if self.gaze_task[:7] == "actdiff":
-            #self.masked_normalization_values = get_masked_normalization(self.args.actdiff_augmentation_type)
-            self.masked_normalization_values = get_masked_normalization('standard')
+        if self.gaze_task is not None:
+            if self.gaze_task[:7] == "actdiff":
+                #self.masked_normalization_values = get_masked_normalization(self.args.actdiff_augmentation_type)
+                self.masked_normalization_values = get_masked_normalization('standard')
         
 
     def __len__(self):
@@ -248,8 +250,9 @@ class RoboGazeDataset(Dataset):
                 if self.args.actdiff_segmentation_classes == 'positive':
 
                     ## we have lungmasks for these right now
-                    if label == 1:
-                        img_name = img_id.replace("/","_").split(".dcm")[0]
+                    img_name = img_id.replace("/","_").split(".dcm")[0]
+                    lungmask_exists = os.path.exists(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                    if label == 1 and lungmask_exists:    
                         lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
                         lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
 
@@ -625,7 +628,6 @@ def fetch_entire_dataloader(source,
                 )
 
 if __name__ == "__main__":
-
     dls = fetch_dataloaders("cxr_p","/media",0.2,2,1,4, gaze_task="actdiff_gaze")
     print(len(dls['train'].dataset))
     print(len(dls['val'].dataset))

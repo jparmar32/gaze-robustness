@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 
 def load_file_markers(
     source,
+    train_size,
     split_type,
     ood_type,
     val_scale,
@@ -33,9 +34,11 @@ def load_file_markers(
 
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
-        file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
 
-        ### if blah and source
+        if train_size == "all":
+            file_markers_dir = os.path.join(file_dir, "new_trainval_all.pkl") 
+        else:
+            file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
         
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
@@ -56,8 +59,13 @@ def load_file_markers(
             file_markers = file_markers_val
 
     elif split_type == "test":
-        
-        file_markers_dir = os.path.join(file_dir, "test_list.pkl")
+
+        if source == 'cxr_p' and train_size == 'all':
+            file_markers_dir = os.path.join(file_dir, "new_test_all.pkl")
+        else:
+            file_markers_dir = os.path.join(file_dir, "test_list.pkl")
+
+
         if subclass:
             file_markers_dir = os.path.join(file_dir, "test_list_tube.pkl")
 
@@ -234,7 +242,7 @@ def compute_avg_heatmap(gaze_seqs, grid_width = 8):
     return np.mean(heatmaps,axis=0)
 
 
-def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, return_img_pths=False, verbose=True):
+def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, return_img_pths=False, verbose=True, train_size='small'):
     """
     Returns: a dictionary of (gaze_id: gaze_seq) for the split type and source
     """
@@ -246,7 +254,7 @@ def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, retur
 
     # load file markers for split to know which gaze sequences to return
     
-    file_markers = load_file_markers(source, split_type, False, val_scale, seed, False)
+    file_markers = load_file_markers(source, train_size, split_type, False, val_scale, seed, False)
 
     gaze_seqs = []
     labels = []
@@ -280,14 +288,15 @@ def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, retur
     return gaze_seqs, labels, gaze_ids
 
 
-def load_gaze_attribute_labels(source, split_type, task, seed):
+def load_gaze_attribute_labels(source, split_type, task, seed, train_size='small'):
     """
     Creates helper task labels depending on gaze_mtl_task
     options are: loc1, loc2, time, diffusivity
     """
 
     # pull all gaze sequences
-    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, seed)
+    return_img_pths = True if train_size == 'all' else False
+    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, seed, train_size=train_size, return_img_pths=return_img_pths)
     # create task_labels dict
     task_labels = {}
     for ndx,gaze_id in enumerate(gaze_ids):

@@ -2,31 +2,31 @@ import json
 import numpy as np
 import os
 
-
 train_set = 'cxr_p'
 test_set = 'cxr_p'
 ood_shift = None
 val = False
-metric = 'robust_auroc'
-subclass_eval = True
-gaze_task = "actdiff_lungmask"
+metric = 'test_auroc'
+subclass_eval = False
+gaze_task = "actdiff"
 tuning_eval = False
-lungmask_size = 224
+lungmask_size = 128
 segmentation_class = "positive"
-augmentation_type = "gaussian_blur"
+augmentation_type = "normal"
 similarity_type = "l2"
-al = '1e-7'
+al = '1e-5'
 machine = 'gemini'
 prepend_path = '/media/nvme_data/jupinder_cxr_robustness_results' if machine == 'gemini' else '/mnt/data/gaze_robustness_results'
 
-results_dir = f'{prepend_path}/{gaze_task}/similarity_type_{similarity_type}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
+#results_dir = f'{prepend_path}/{gaze_task}/cxr_p_train_size_all/similarity_type_{similarity_type}/segmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
+results_dir = f'{prepend_path}/{gaze_task}/cxr_p_train_size_all/similarity_type_{similarity_type}/segmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}'
 use_top_seeds = False
 
 if ood_shift is not None:
-    results_dir = f'{prepend_path}/{gaze_task}/similarity_type_{similarity_type}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
+    results_dir = f'{prepend_path}/{gaze_task}/cxr_p_train_size_all/similarity_type_{similarity_type}/segmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/test_set_{test_set}/ood_shift_{ood_shift}'
 
 if val:
-    results_dir = f'{prepend_path}/{gaze_task}/similarity_type_{similarity_type}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_{lungmask_size}/actdiff_lambda_{al}/train_set_{train_set}/val_set_{train_set}'
+    results_dir = f'{prepend_path}/{gaze_task}/cxr_p_train_size_all/similarity_type_{similarity_type}/segmentation_classes_{segmentation_class}/augmentation_type_{augmentation_type}/lungmask_size_/actdiff_lambda_{al}/train_set_{train_set}/val_set_{train_set}'
     metric = 'val_auroc'
 
 if subclass_eval:
@@ -40,7 +40,7 @@ if tuning_eval:
 
 #results_dir = f'/mnt/gaze_robustness_results'
 
-seeds = [x for x in range(10)] 
+seeds = [x for x in range(3)] 
 lrs = ["1e-5", "1e-4", "1e-3"]
 wds = ["1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1e-0"]
 
@@ -111,5 +111,6 @@ for cv in seeds:
         results = json.load(data_file)
         means.append(results[metric])
 
+print(means)
 print(f"\nMean Auroc: {np.mean(means):.3f}")
 print(f"\nStd: {np.std(means):.3f}")
