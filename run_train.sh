@@ -20,13 +20,13 @@ test="cxr_p"
 #   --actdiff_lambda 1.15e-1 
 #done
 
-for seed in 0 1 2 3 4
+for seed in 0
 do 
    for lr in 1e-4 
    do
-       for al in 1e-5 
+       for al in 1e-4
        do
-            for lungmask_size in 56 #224 ## both 56 and 224
+            for lungmask_size in 224 #224 ## both 56 and 224
             do
                 python ./train.py \
                 --epochs 100 \
