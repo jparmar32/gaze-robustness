@@ -309,7 +309,76 @@ class RoboGazeDataset(Dataset):
                 else:
                     segmask = -1*torch.ones((7,7))
                     return img, label, segmask
-            
+
+            if self.gaze_task in ["rrr", "grad_mask"]:
+                rle = self.rle_dict[img_id.split("/")[-1].split(".dcm")[0]]
+                y_true = rle != " -1"
+
+                ### use the segmentation mask
+                if y_true:
+                    # extract segmask
+                    segmask_org = rle2mask(rle, 1024, 1024).T
+
+                    if self.args.saliency_segmask_size != self.IMG_SIZE:
+
+                        segmask_int = nn.functional.max_pool2d(torch.tensor(segmask_org).unsqueeze(0), int(1024/self.args.saliency_segmask_size)).squeeze().numpy()
+                        segmask_int = (segmask_int > 0) * 1
+                        segmask = resize(segmask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
+                    else:
+                        segmask = resize(segmask_org, (self.IMG_SIZE, self.IMG_SIZE))
+                        segmask = (segmask > 0) * 1
+
+                    segmask = torch.from_numpy(segmask)
+                    segmask = torch.where(segmask > 0, torch.ones(segmask.shape), torch.zeros(segmask.shape)).long()
+                    return img, label, segmask
+
+                else:
+                    segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
+                    return img, label, segmask
+                
+            if self.gaze_task in ["rrr_lungmask", "grad_mask_lungmask"]:
+                if self.args.saliency_segmentation_classes == 'positive':
+
+                    ## we have lungmasks for these right now
+                    img_name = img_id.replace("/","_").split(".dcm")[0]
+                    lungmask_exists = os.path.exists(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                    if label == 1 and lungmask_exists:    
+                        lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                        lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
+
+                        if self.args.saliency_lungmask_size != self.IMG_SIZE:
+                            lung_mask_int = nn.functional.max_pool2d(torch.tensor(lung_mask).unsqueeze(0), int(224/self.args.saliency_lungmask_size)).squeeze().numpy()
+                            lung_mask_int = (lung_mask_int > 0) * 1
+                            lung_mask = resize(lung_mask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                            lung_mask = (lung_mask > 0) * 1
+
+                        lung_mask = torch.from_numpy(lung_mask)
+                        lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+                        return img, label, lung_mask
+
+                    else:
+                        segmask = torch.ones((self.IMG_SIZE,self.IMG_SIZE)).long()
+                        return img, label, segmask
+
+                elif self.args.saliency_segmentation_classes == 'all':
+                    
+                    img_name = img_id.replace("/","_").split(".dcm")[0]
+                    lung_mask = np.load(f"./lung_segmentations/annotations/{img_name}_lungmask.npy")
+                    lung_mask = np.where(lung_mask > 0, np.ones(lung_mask.shape), np.zeros(lung_mask.shape))
+
+                    if self.args.saliency_lungmask_size != self.IMG_SIZE:
+                        lung_mask_int = nn.functional.max_pool2d(torch.tensor(lung_mask).unsqueeze(0), int(224/self.args.saliency_lungmask_size)).squeeze().numpy()
+                        lung_mask_int = (lung_mask_int > 0) * 1
+                        lung_mask = resize(lung_mask_int, (self.IMG_SIZE, self.IMG_SIZE))
+                        lung_mask = (lung_mask > 0) * 1
+
+                    lung_mask = torch.from_numpy(lung_mask)
+                    lung_mask = torch.where(lung_mask > 0, torch.ones(lung_mask.shape), torch.zeros(lung_mask.shape)).long()
+                    return img, label, lung_mask
+
+
             if self.gaze_task is None:
                 return img, label, 0
 

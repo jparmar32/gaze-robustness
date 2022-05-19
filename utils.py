@@ -13,6 +13,7 @@ import pdb
 import sklearn.metrics as skl
 import cv2
 import skimage.exposure as exposure
+import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
 
@@ -554,3 +555,65 @@ def get_masked_normalization(augmentation_type):
 
     else:
         return None 
+
+def calculate_grad_mask_loss(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    contrast = torch.abs(y_pred[:, 0] - y_pred[:, 1])
+    gradients = torch.autograd.grad(outputs=contrast, inputs=x, allow_unused=True, create_graph=True)[0]
+
+    grad_mask_loss = gradients * inverse_segmentation_mask.float()
+    grad_mask_loss = grad_mask_loss.abs()
+    return grad_mask_loss
+
+def calculate_rrr_loss(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    EPS = 10e-12
+    y_pred = torch.sum(torch.log(F.softmax(y_pred, dim=1) + EPS))
+    gradients = torch.autograd.grad(outputs=y_pred, inputs=x, allow_unused=True, create_graph=True)[0]
+
+    rrr_loss = gradients * inverse_segmentation_mask.float()
+    rrr_loss = rrr_loss**2
+
+    return rrr_loss
+
+def calculate_grad_mask_loss_vectorized(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(1)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask], dim=1)
+
+    
+    contrast = torch.abs(y_pred[:, 0] - y_pred[:, 1])
+    gradients = torch.autograd.grad(outputs=contrast, inputs=x, allow_unused=True, create_graph=True, grad_outputs=torch.ones_like(contrast))[0]
+
+    grad_mask_loss = gradients * inverse_segmentation_mask.float()
+    grad_mask_loss = grad_mask_loss.abs()
+    return grad_mask_loss
+
+def calculate_rrr_loss_vectorized(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(1)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask], dim=1)
+
+    EPS = 10e-12
+    y_pred = torch.sum(torch.log(F.softmax(y_pred, dim=1) + EPS), dim=1)
+
+    gradients = torch.autograd.grad(outputs=y_pred, inputs=x, allow_unused=True, create_graph=True, grad_outputs=torch.ones_like(y_pred))[0]
+
+    rrr_loss = gradients * inverse_segmentation_mask.float()
+    rrr_loss = rrr_loss**2
+
+    return rrr_loss
