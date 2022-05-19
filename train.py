@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import pickle
+from re import S
 import sys
 import warnings
 import sklearn.metrics as skl
@@ -23,7 +24,7 @@ from dataloader import fetch_dataloaders
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss
+from utils import AverageMeter, accuracy, compute_roc_auc, build_scheduler, get_lrs, calculate_actdiff_loss, calculate_grad_mask_loss, calculate_rrr_loss, calculate_grad_mask_loss_vectorized, calculate_rrr_loss_vectorized
 from models.extract_CAM import get_CAM_from_img
 from models.extract_activations import get_model_activations
 
@@ -48,7 +49,7 @@ def parse_args():
     parser.add_argument("--subclass_eval", action='store_true', help="Whether to report subclass performance metrics on the test set")
     parser.add_argument("--num_classes", type=int, default=2, help="Number of classes in the training set")
 
-    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', 'actdiff_lungmask', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
+    parser.add_argument("--gaze_task", type=str, choices=['data_augment','cam_reg', 'cam_reg_convex', 'segmentation_reg', 'actdiff', 'actdiff_gaze', 'actdiff_lungmask', 'rrr', 'grad_mask', 'rrr_lungmask', 'grad_mask_lungmask', None], default=None, help="Type of gaze enhanced or baseline expeeriment to try out")
     parser.add_argument("--cam_weight", type=float, default=0, help="Weight to apply to the CAM Regularization with Gaze Heatmap Approach")
     parser.add_argument("--cam_convex_alpha", type=float, default=0, help="Weight in the convex combination of average gaze heatmap and image specific")
 
@@ -66,6 +67,10 @@ def parse_args():
     parser.add_argument("--actdiff_segmentation_classes", type=str, choices=['all', 'positive'], default='positive', help="Which classes to use for the segmentations in ActDiff")
     parser.add_argument("--actdiff_features", type=str, choices=['all', 'last'], default='all', help="What features to regularize in ActDiff")
 
+    parser.add_argument("--saliency_segmask_size", type=int, default=224, help="Segmentation Mask Resolution to Use")
+    parser.add_argument("--saliency_lungmask_size", type=int, default=224, help="Lungmask Resolution to Use")
+    parser.add_argument("--saliency_segmentation_classes", type=str, choices=['all', 'positive'], default='positive', help="Which classes to use for the segmentations in the saliency methods")
+    parser.add_argument("--saliency_lambda", type=float, default=0, help="Weight associated with the rrr or gradmask loss")
 
     args = parser.parse_args()
     return args
@@ -259,9 +264,12 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
         if use_cuda:
             targets = targets.cuda(non_blocking=True)
             inputs = inputs.cuda(non_blocking=True)
-            if gaze_task in ["actdiff", 'actdiff_gaze', 'actdiff_lungmask']:
+            if gaze_task in ["actdiff", 'actdiff_gaze', 'actdiff_lungmask', 'grad_mask', 'rrr', 'grad_mask_lungmask', 'rrr_lungmask']:
                 gaze_attributes = gaze_attributes.cuda(non_blocking=True)
       
+        if gaze_task in ['rrr', 'grad_mask_lungmask', 'rrr_lungmask', 'grad_mask']:
+            inputs.requires_grad = True
+
         output = model(inputs)
 
         if isinstance(output, tuple):
@@ -271,7 +279,7 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
 
         c_loss = loss_fn(logits, targets)
 
-
+        ### logits shape is (batch_size, 2) -> how to get segmentation masks from here -> gaze_attributes
         a_loss = 0
         if cam_weight:
             n = len(targets)
@@ -320,22 +328,51 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                 masked_activations = get_model_activations(masked_image, model)
 
                 if args.actdiff_features == "last":
-                    regular_activations = regular_activtations[-1]
+                    regular_activations = regular_activations[-1]
                     masked_activations = masked_activations[-1]
 
                 cum_activation_losses[i] = args.actdiff_lambda * calculate_actdiff_loss(regular_activations, masked_activations, args.actdiff_similarity_type)
             actdiff_loss = cum_activation_losses.sum()
 
+        saliency_loss = 0
+        if args.saliency_lambda:
+            
+            #### looping through batch
+            batch_size = len(targets)
+            batch_loss = torch.zeros(batch_size)
+            for i in range(batch_size):
+                image = inputs[i,...]
+                segmentation_mask = gaze_attributes[i,...]
+                y_pred = model(image.unsqueeze(0))
+
+                if gaze_task in ["rrr", "rrr_lungmask"]:
+                    batch_loss[i] = calculate_rrr_loss(image, segmentation_mask, y_pred).sum() * args.saliency_lambda
+                else:
+                    batch_loss[i] = calculate_grad_mask_loss(image, segmentation_mask, y_pred).sum() * args.saliency_lambda
+
+            saliency_loss = batch_loss.sum()
+       
+            '''
+            ### vectorized  
+            if gaze_task in ["rrr", "rrr_lungmask"]:
+                saliency_loss = calculate_rrr_loss_vectorized(inputs, gaze_attributes, logits).sum() * args.saliency_lambda
+            else:
+                saliency_loss = calculate_grad_mask_loss_vectorized(inputs, gaze_attributes, logits).sum() * args.saliency_lambda
+            '''
+            
+            
+
         ## writer log losses
         if global_step % 2 == 0:
             writer.add_scalar(f"train/ce_loss", c_loss, global_step)
             writer.add_scalar(f"train/actdiff_loss", actdiff_loss, global_step)
+            writer.add_scalar(f"train/saliency_loss", saliency_loss, global_step)
 
         
         if args.actdiff_similarity_type == "l2":
-            loss = c_loss + a_loss + actdiff_loss
+            loss = c_loss + a_loss + actdiff_loss + saliency_loss
         elif args.actdiff_similarity_type == "cosine":
-            loss = c_loss + a_loss - actdiff_loss
+            loss = c_loss + a_loss - actdiff_loss + saliency_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -489,7 +526,7 @@ def main():
 
         ##weight decay is L2
         #optimizer = optim.SGD(params_to_update, lr=0.0001, weight_decay=0.0001, momentum=0.9, nesterov=True)
-        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type} and actdiff lambda: {args.actdiff_lambda} and augmentation_type: {args.actdiff_augmentation_type} and segmentation classes: {args.actdiff_segmentation_classes} ")
+        print(f"lr: {args.lr} and l2: {args.wd} and seed: {args.seed} and actdiff lungmask size: {args.actdiff_lungmask_size} and actdiff similarity: {args.actdiff_similarity_type} and saliency lambda: {args.saliency_lambda} and augmentation_type: {args.actdiff_augmentation_type} and segmentation classes: {args.actdiff_segmentation_classes} ")
         optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=args.wd)
         
         scheduler = build_scheduler(args, optimizer)

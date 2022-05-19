@@ -20,59 +20,53 @@ test="cxr_p"
 #   --actdiff_lambda 1.15e-1 
 #done
 
-for seed in 0 1 2 3 4
+for seed in 0 1 2 #4 5 6 7 8 9
 do 
    for lr in 1e-4 
    do
-       for al in 1e-5 
+       for sl in 1e-4 1e-3 1e-2 1e-1 1 
        do
-            for lungmask_size in 56 #224 ## both 56 and 224
-            do
-                python ./train.py \
-                --epochs 100 \
-                --min_lr 0 \
-                --lr $lr \
-                --wd 0 \
-                --seed $seed \
-                --batch_size 16 \
-                --train_set $train \
-                --test_set $test \
-                --train_size "all" \
-                --save_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/cxr_p_train_size_all/similarity_type_l2/segmentation_classes_positive/augmentation_type_normal/lungmask_size_$lungmask_size/actdiff_lambda_$al" \
-                --gaze_task "actdiff_lungmask" \
-                --actdiff_lambda $al \
-                --actdiff_lungmask_size $lungmask_size \
-                --machine 'gemini' \
-                --actdiff_augmentation_type "normal" \
-                --actdiff_segmentation_classes "positive" \
-                --actdiff_similarity_type "l2" \
-                --save_model \
-                #--checkpoint_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/similarity_type_cosine/segmentation_classes_$segmentation_classes/augmentation_type_$augmentation_type/lungmask_size_$lungmask_size/actdiff_lambda_$al/train_set_$train/seed_$seed/model.pt" \
-                #--ood_shift "hospital_age" \
-                #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff_lungmask/lungmask_size_$lungmask_size/train_set_$train/seed_$seed/model.pt" \
-                #--save_model \
-                #--checkpoint_dir "/mnt/data/gaze_robustness_results/erm_resnet_baseline/wd_0/train_set_$train/seed_$seed/model.pt" \
-                #--ood_shift "hospital_age" \
-                #--gaze_task "actdiff" \
-                #--actdiff_segmask_size $seg_size \
-                #--ood_shift "age" \
-                #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff/seg_size_$seg_size/train_set_$train/seed_$seed/model.pt" \
-                #--save_model \
-                #--checkpoint_dir "/mnt/data/gaze_robustness_results/resnet_only/train_set_$train/seed_$seed/model.pt" \
-                #--subclass_eval \
-                #--gaze_task "resnet_only" \
-                #--save_model \
-                #--save_model \
-                #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
-                #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
-                #--gan_type "gan" \
-                #--ood_shift "hospital" \
-                #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
-                #--cam_weight 0.5 \
-                #--cam_convex_alpha 0.5 \
-                #--subclass_eval \
-                #--save_model
-            done 
+            python ./train.py \
+            --epochs 100 \
+            --min_lr 0 \
+            --lr $lr \
+            --wd 0 \
+            --seed $seed \
+            --batch_size 16 \
+            --train_set $train \
+            --test_set $test \
+            --train_size "small" \
+            --save_dir "/mnt/data/gaze_robustness_results/grad_mask/cxr_p_train_size_small/saliency_lambda_$sl" \
+            --gaze_task "grad_mask" \
+            --saliency_lambda $sl \
+            --machine 'meteor' \
+            --save_model \
+            #--checkpoint_dir "/media/nvme_data/jupinder_cxr_robustness_results/actdiff_lungmask/similarity_type_cosine/segmentation_classes_$segmentation_classes/augmentation_type_$augmentation_type/lungmask_size_$lungmask_size/actdiff_lambda_$al/train_set_$train/seed_$seed/model.pt" \
+            #--ood_shift "hospital_age" \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff_lungmask/lungmask_size_$lungmask_size/train_set_$train/seed_$seed/model.pt" \
+            #--save_model \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/erm_resnet_baseline/wd_0/train_set_$train/seed_$seed/model.pt" \
+            #--ood_shift "hospital_age" \
+            #--gaze_task "actdiff" \
+            #--actdiff_segmask_size $seg_size \
+            #--ood_shift "age" \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/actdiff/seg_size_$seg_size/train_set_$train/seed_$seed/model.pt" \
+            #--save_model \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/resnet_only/train_set_$train/seed_$seed/model.pt" \
+            #--subclass_eval \
+            #--gaze_task "resnet_only" \
+            #--save_model \
+            #--save_model \
+            #--gan_positive_model "/home/jsparmar/gaze-robustness/gan/positive_class" \
+            #--gan_negative_model "/home/jsparmar/gaze-robustness/gan/negative_class" \
+            #--gan_type "gan" \
+            #--ood_shift "hospital" \
+            #--checkpoint_dir "/mnt/data/gaze_robustness_results/acgan_generation/train_set_$train/seed_$seed/model.pt" \
+            #--cam_weight 0.5 \
+            #--cam_convex_alpha 0.5 \
+            #--subclass_eval \
+            #--save_model
+         
         done
     done
 done
