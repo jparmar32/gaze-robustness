@@ -13,11 +13,13 @@ import pdb
 import sklearn.metrics as skl
 import cv2
 import skimage.exposure as exposure
+import torch.nn.functional as F
 
 import matplotlib.pyplot as plt
 
 def load_file_markers(
     source,
+    train_size,
     split_type,
     ood_type,
     val_scale,
@@ -33,7 +35,11 @@ def load_file_markers(
 
     if split_type in ["train", "val"]:
         #TODO: for CXR-P, make filemarker default gold
-        file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
+
+        if train_size == "all":
+            file_markers_dir = os.path.join(file_dir, "new_trainval_all.pkl") 
+        else:
+            file_markers_dir = os.path.join(file_dir, "trainval_list_gold.pkl") #gold
         
         with open(file_markers_dir, "rb") as fp:
             file_markers = pickle.load(fp)
@@ -54,8 +60,13 @@ def load_file_markers(
             file_markers = file_markers_val
 
     elif split_type == "test":
-        
-        file_markers_dir = os.path.join(file_dir, "test_list.pkl")
+
+        if source == 'cxr_p' and train_size == 'all':
+            file_markers_dir = os.path.join(file_dir, "new_test_all.pkl")
+        else:
+            file_markers_dir = os.path.join(file_dir, "test_list.pkl")
+
+
         if subclass:
             file_markers_dir = os.path.join(file_dir, "test_list_tube.pkl")
 
@@ -232,7 +243,7 @@ def compute_avg_heatmap(gaze_seqs, grid_width = 8):
     return np.mean(heatmaps,axis=0)
 
 
-def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, return_img_pths=False, verbose=True):
+def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, return_img_pths=False, verbose=True, train_size='small'):
     """
     Returns: a dictionary of (gaze_id: gaze_seq) for the split type and source
     """
@@ -244,7 +255,7 @@ def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, retur
 
     # load file markers for split to know which gaze sequences to return
     
-    file_markers = load_file_markers(source, split_type, False, val_scale, seed, False)
+    file_markers = load_file_markers(source, train_size, split_type, False, val_scale, seed, False)
 
     gaze_seqs = []
     labels = []
@@ -278,14 +289,15 @@ def load_gaze_data(source, split_type, train_scale, val_scale, gold, seed, retur
     return gaze_seqs, labels, gaze_ids
 
 
-def load_gaze_attribute_labels(source, split_type, task, seed):
+def load_gaze_attribute_labels(source, split_type, task, seed, train_size='small'):
     """
     Creates helper task labels depending on gaze_mtl_task
     options are: loc1, loc2, time, diffusivity
     """
 
     # pull all gaze sequences
-    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, seed)
+    return_img_pths = True if train_size == 'all' else False
+    seqs, labels, gaze_ids = load_gaze_data(source, split_type, 1, 0.2, False, seed, train_size=train_size, return_img_pths=return_img_pths)
     # create task_labels dict
     task_labels = {}
     for ndx,gaze_id in enumerate(gaze_ids):
@@ -543,3 +555,65 @@ def get_masked_normalization(augmentation_type):
 
     else:
         return None 
+
+def calculate_grad_mask_loss(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    contrast = torch.abs(y_pred[:, 0] - y_pred[:, 1])
+    gradients = torch.autograd.grad(outputs=contrast, inputs=x, allow_unused=True, create_graph=True)[0]
+
+    grad_mask_loss = gradients * inverse_segmentation_mask.float()
+    grad_mask_loss = grad_mask_loss.abs()
+    return grad_mask_loss
+
+def calculate_rrr_loss(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(0)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask])
+
+    EPS = 10e-12
+    y_pred = torch.sum(torch.log(F.softmax(y_pred, dim=1) + EPS))
+    gradients = torch.autograd.grad(outputs=y_pred, inputs=x, allow_unused=True, create_graph=True)[0]
+
+    rrr_loss = gradients * inverse_segmentation_mask.float()
+    rrr_loss = rrr_loss**2
+
+    return rrr_loss
+
+def calculate_grad_mask_loss_vectorized(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(1)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask], dim=1)
+
+    
+    contrast = torch.abs(y_pred[:, 0] - y_pred[:, 1])
+    gradients = torch.autograd.grad(outputs=contrast, inputs=x, allow_unused=True, create_graph=True, grad_outputs=torch.ones_like(contrast))[0]
+
+    grad_mask_loss = gradients * inverse_segmentation_mask.float()
+    grad_mask_loss = grad_mask_loss.abs()
+    return grad_mask_loss
+
+def calculate_rrr_loss_vectorized(x, segmentation_mask, y_pred):
+
+    inverse_segmentation_mask = 1 - segmentation_mask
+    inverse_segmentation_mask = inverse_segmentation_mask.bool()
+    inverse_segmentation_mask = inverse_segmentation_mask.unsqueeze(1)
+    inverse_segmentation_mask = torch.cat([inverse_segmentation_mask, inverse_segmentation_mask, inverse_segmentation_mask], dim=1)
+
+    EPS = 10e-12
+    y_pred = torch.sum(torch.log(F.softmax(y_pred, dim=1) + EPS), dim=1)
+
+    gradients = torch.autograd.grad(outputs=y_pred, inputs=x, allow_unused=True, create_graph=True, grad_outputs=torch.ones_like(y_pred))[0]
+
+    rrr_loss = gradients * inverse_segmentation_mask.float()
+    rrr_loss = rrr_loss**2
+
+    return rrr_loss
