@@ -351,16 +351,6 @@ def train_epoch(model, loader, optimizer, loss_fn=nn.CrossEntropyLoss(), use_cud
                     batch_loss[i] = calculate_grad_mask_loss(image, segmentation_mask, y_pred).sum() * args.saliency_lambda
 
             saliency_loss = batch_loss.sum()
-       
-            '''
-            ### vectorized  
-            if gaze_task in ["rrr", "rrr_lungmask"]:
-                saliency_loss = calculate_rrr_loss_vectorized(inputs, gaze_attributes, logits).sum() * args.saliency_lambda
-            else:
-                saliency_loss = calculate_grad_mask_loss_vectorized(inputs, gaze_attributes, logits).sum() * args.saliency_lambda
-            '''
-            
-            
 
         ## writer log losses
         if global_step % 2 == 0:
